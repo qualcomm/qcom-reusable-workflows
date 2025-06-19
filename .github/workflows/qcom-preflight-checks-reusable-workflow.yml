@@ -1,3 +1,4 @@
+name: Qualcomm Preflight Checks Reusable Workflow
 on:
   workflow_call:
     inputs:
