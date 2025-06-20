@@ -21,7 +21,13 @@ on:
       dependency-review:
         required: false
         type: boolean
-        default: true      
+        default: true 
+      base_ref:
+        required: false
+        type: string
+      head_ref:
+        required: false
+        type: string   
     secrets:
       SEMGREP_APP_TOKEN:
         required: true
@@ -117,4 +123,6 @@ jobs:
       - name: 'Dependency Review'
         uses: actions/dependency-review-action@v4
         with:
+          base-ref: ${{ inputs.base_ref }}
+          head-ref: ${{ inputs.head_ref }}
           fail-on-severity: high  
