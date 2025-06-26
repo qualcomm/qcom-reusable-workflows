@@ -116,7 +116,7 @@ jobs:
         uses: qualcomm/commit-emails-check-action@v1.0.0
 
   dependency-review:
-    if: ${{ inputs.dependency-review && !github.event.repository.private }}
+    if: ${{ inputs.dependency-review && github.event.repository.visibility == 'public' }}
     runs-on: ubuntu-latest
     steps:
       - name: 'Checkout Repository'
