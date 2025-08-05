@@ -37,6 +37,8 @@ jobs:
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - name: Verify repolinter config file is present
         id: check_files
         uses: andstor/file-existence-action@v3
