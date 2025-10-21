@@ -29,6 +29,7 @@ on:
 permissions:
   contents: read
   security-events: write
+  pull-requests: write
   
 jobs:
   repolinter:
@@ -62,7 +63,7 @@ jobs:
       image: semgrep/semgrep:1.125.0
     steps:
       - uses: actions/checkout@v4
-      - run: semgrep ci --sarif-output=semgrep-report.sarif
+      - run: semgrep ci --sarif-output=semgrep-report.sarif --json-output=semgrep-report.json || echo "Semgrep found issues"
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
@@ -72,6 +73,58 @@ jobs:
         with:
           sarif_file: semgrep-report.sarif
           category: semgrep-scan
+          
+      - name: Process Semgrep results and comment on PR
+        if: always()
+        run: |
+          # Install jq for JSON processing
+          apt-get update && apt-get install -y jq
+          
+          # Check if the JSON output file exists
+          if [ -f "semgrep-report.json" ]; then
+            # Process the JSON output to create a PR comment
+            FINDINGS_COUNT=$(jq '.results | length' semgrep-report.json)
+            
+            if [ "$FINDINGS_COUNT" -gt 0 ]; then
+              # Create a markdown summary of findings
+              echo "## 🔍 Semgrep Security Analysis Results" > semgrep-comment.md
+              echo "" >> semgrep-comment.md
+              echo "⚠️ **$FINDINGS_COUNT security issue(s) found in your code**" >> semgrep-comment.md
+              echo "" >> semgrep-comment.md
+              echo "<details>" >> semgrep-comment.md
+              echo "<summary>Click to see detailed findings</summary>" >> semgrep-comment.md
+              echo "" >> semgrep-comment.md
+              
+              # Process each finding
+              jq -r '.results[] | "### ❌ " + .check_id + "\n\n**Severity:** " + .extra.severity + "\n\n**File:** " + .path + ":" + (.start.line|tostring) + "\n\n**Description:** " + .extra.message + "\n\n```\n" + .extra.lines + "\n```\n\n---\n"' semgrep-report.json >> semgrep-comment.md
+              
+              echo "</details>" >> semgrep-comment.md
+              echo "" >> semgrep-comment.md
+              echo "Please address these security issues before merging." >> semgrep-comment.md
+              
+              # Limit comment size to avoid GitHub API limits
+              if [ $(wc -c < semgrep-comment.md) -gt 65000 ]; then
+                head -c 64000 semgrep-comment.md > semgrep-comment-truncated.md
+                echo "\n\n... (output truncated due to size limits)\n\nToo many issues to display in a comment. Please run Semgrep locally for complete results." >> semgrep-comment-truncated.md
+                mv semgrep-comment-truncated.md semgrep-comment.md
+              fi
+              
+              # Install GitHub CLI
+              apt-get install -y gh
+              
+              # Post the comment to the PR
+              gh auth login --with-token <<< "$GITHUB_TOKEN"
+              gh pr comment ${{ github.event.pull_request.number }} -F semgrep-comment.md -R ${{ github.repository }}
+            else
+              echo "No security issues found by Semgrep. Great job!"
+            fi
+          else
+            echo "No Semgrep report found. Skipping PR comment."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      
+      
   
   copyright-license-check:
     if: ${{ ( inputs.copyright-license-detector && contains('pull_request_target', github.event_name) && github.event.action != 'closed' ) }}
