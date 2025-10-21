@@ -74,55 +74,79 @@ jobs:
           sarif_file: semgrep-report.sarif
           category: semgrep-scan
           
+      - name: Upload Semgrep results as artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: semgrep-json-report
+          path: semgrep-report.json
+          retention-days: 7
+          
       - name: Process Semgrep results and comment on PR
         if: always()
-        run: |
-          # Install jq for JSON processing
-          apt-get update && apt-get install -y jq
-          
-          # Check if the JSON output file exists
-          if [ -f "semgrep-report.json" ]; then
-            # Process the JSON output to create a PR comment
-            FINDINGS_COUNT=$(jq '.results | length' semgrep-report.json)
+        # Use a separate runner that has the necessary tools
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
             
-            if [ "$FINDINGS_COUNT" -gt 0 ]; then
-              # Create a markdown summary of findings
-              echo "## 🔍 Semgrep Security Analysis Results" > semgrep-comment.md
-              echo "" >> semgrep-comment.md
-              echo "⚠️ **$FINDINGS_COUNT security issue(s) found in your code**" >> semgrep-comment.md
-              echo "" >> semgrep-comment.md
-              echo "<details>" >> semgrep-comment.md
-              echo "<summary>Click to see detailed findings</summary>" >> semgrep-comment.md
-              echo "" >> semgrep-comment.md
-              
-              # Process each finding
-              jq -r '.results[] | "### ❌ " + .check_id + "\n\n**Severity:** " + .extra.severity + "\n\n**File:** " + .path + ":" + (.start.line|tostring) + "\n\n**Description:** " + .extra.message + "\n\n```\n" + .extra.lines + "\n```\n\n---\n"' semgrep-report.json >> semgrep-comment.md
-              
-              echo "</details>" >> semgrep-comment.md
-              echo "" >> semgrep-comment.md
-              echo "Please address these security issues before merging." >> semgrep-comment.md
-              
-              # Limit comment size to avoid GitHub API limits
-              if [ $(wc -c < semgrep-comment.md) -gt 65000 ]; then
-                head -c 64000 semgrep-comment.md > semgrep-comment-truncated.md
-                echo "\n\n... (output truncated due to size limits)\n\nToo many issues to display in a comment. Please run Semgrep locally for complete results." >> semgrep-comment-truncated.md
-                mv semgrep-comment-truncated.md semgrep-comment.md
-              fi
-              
-              # Install GitHub CLI
-              apt-get install -y gh
-              
-              # Post the comment to the PR
-              gh auth login --with-token <<< "$GITHUB_TOKEN"
-              gh pr comment ${{ github.event.pull_request.number }} -F semgrep-comment.md -R ${{ github.repository }}
-            else
-              echo "No security issues found by Semgrep. Great job!"
-            fi
-          else
-            echo "No Semgrep report found. Skipping PR comment."
-          fi
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+            try {
+              // Check if the JSON output file exists
+              if (fs.existsSync('semgrep-report.json')) {
+                const semgrepReport = JSON.parse(fs.readFileSync('semgrep-report.json', 'utf8'));
+                const findingsCount = semgrepReport.results ? semgrepReport.results.length : 0;
+                
+                let commentBody = '';
+                
+                if (findingsCount > 0) {
+                  // Create a markdown summary of findings
+                  commentBody = `## 🔍 Semgrep Security Analysis Results\n\n`;
+                  commentBody += `⚠️ **${findingsCount} security issue(s) found in your code**\n\n`;
+                  commentBody += `<details>\n<summary>Click to see detailed findings</summary>\n\n`;
+                  
+                  // Process each finding
+                  for (const result of semgrepReport.results) {
+                    commentBody += `### ❌ ${result.check_id}\n\n`;
+                    commentBody += `**Severity:** ${result.extra.severity}\n\n`;
+                    commentBody += `**File:** ${result.path}:${result.start.line}\n\n`;
+                    commentBody += `**Description:** ${result.extra.message}\n\n`;
+                    commentBody += `\`\`\`\n${result.extra.lines}\n\`\`\`\n\n---\n`;
+                  }
+                  
+                  commentBody += `</details>\n\n`;
+                  commentBody += `Please address these security issues before merging.`;
+                  
+                  // Limit comment size to avoid GitHub API limits
+                  if (commentBody.length > 65000) {
+                    commentBody = commentBody.substring(0, 64000);
+                    commentBody += '\n\n... (output truncated due to size limits)\n\n';
+                    commentBody += 'Too many issues to display in a comment. Please run Semgrep locally for complete results.';
+                  }
+                } else {
+                  commentBody = `## ✅ Semgrep Security Analysis Results\n\n`;
+                  commentBody += `No security issues found in your code. Great job!`;
+                }
+                
+                // Post the comment to the PR
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.payload.pull_request.number,
+                  body: commentBody
+                });
+                
+                // If there are findings, set the job status to reflect issues found
+                if (findingsCount > 0) {
+                  core.warning(`Semgrep found ${findingsCount} security issue(s) in your code. See PR comments for details.`);
+                } else {
+                  core.info(`No security issues found by Semgrep. Great job!`);
+                }
+              } else {
+                core.info(`No Semgrep report found. Skipping PR comment.`);
+              }
+            } catch (error) {
+              core.setFailed(`Error processing Semgrep results: ${error.message}`);
+            }
       
       
   
