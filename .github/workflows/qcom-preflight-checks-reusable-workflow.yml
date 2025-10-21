@@ -76,7 +76,7 @@ jobs:
           
       - name: Upload Semgrep results as artifact
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: semgrep-json-report
           path: semgrep-report.json
