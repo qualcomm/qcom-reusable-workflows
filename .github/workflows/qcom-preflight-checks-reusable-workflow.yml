@@ -21,18 +21,28 @@ on:
       dependency-review:
         required: false
         type: boolean
-        default: true  
-    secrets:
-      SEMGREP_APP_TOKEN:
-        required: true
-        
+        default: true      
+      commit-msg-check:
+        required: false
+        type: boolean
+        default: true
+      sub-char-limit:
+        required: false
+        type: number
+        default: 50
+        description: 'Maximum characters allowed in commit subject line'
+      desc-char-limit:
+        required: false
+        type: number
+        default: 72
+        description: 'Maximum characters allowed per line in commit description'
 permissions:
   contents: read
   security-events: write
   
 jobs:
   repolinter:
-    if: ${{ inputs.repolinter }}
+    if: ${{ inputs.repolinter && (github.event_name == 'push' || github.event_name == 'pull_request') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
@@ -54,27 +64,55 @@ jobs:
           config_url: "https://raw.githubusercontent.com/qualcomm/.github/main/repolint.json"
 
   semgrep-static-analysis:
-    if: ${{ ( inputs.semgrep && contains('pull_request_target', github.event_name) && github.event.action != 'closed' && github.actor != 'dependabot[bot]' ) }}
+    if: ${{ inputs.semgrep && (github.event_name == 'push' || github.event_name == 'pull_request') && github.actor != 'dependabot[bot]' }}
     name: semgrep/ci
     runs-on: ubuntu-latest
 
     container:
       image: semgrep/semgrep:1.125.0
     steps:
-      - uses: actions/checkout@v4
-      - run: semgrep ci --sarif-output=semgrep-report.sarif
-        env:
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-
-      - name: Upload SARIF file for GitHub Advanced Security Dashboard
-        if: ${{ github.event.repository.visibility == 'public' }}
+      - name: checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history to properly detect changes
+          ref: ${{ github.event.pull_request.head.sha }}  # Explicitly checkout the PR code
+      
+      - name: Get changed files
+        id: changed-files
+        run: |
+          git config --global --add safe.directory "$(pwd)"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_SHA=${{ github.event.pull_request.base.sha }}
+            HEAD_SHA=${{ github.event.pull_request.head.sha }}
+            
+            echo "Changed files between $BASE_SHA and $HEAD_SHA:"
+            echo "CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA | tr '\n' ' ')" >> $GITHUB_ENV
+            echo "changed files: $CHANGED_FILES"
+          else
+            # For pushes to main, scan all files
+            echo "CHANGED_FILES=." >> $GITHUB_ENV
+            echo "Scanning all files on main branch"
+          fi
+      
+      - name: Run Semgrep on changed files
+        shell: bash
+        run: |
+          if [ -n "$CHANGED_FILES" ]; then
+            semgrep scan --config auto --json --output semgrep.json $CHANGED_FILES
+            semgrep scan --config auto --sarif --output semgrep.sarif $CHANGED_FILES
+          else
+            echo "No files changed in this PR"
+            echo "[]" > semgrep.json
+            echo '{"runs": []}' > semgrep.sarif
+          fi
+      
+      - name: Upload SARIF to github
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: semgrep-report.sarif
-          category: semgrep-scan
-  
+          sarif_file: semgrep.sarif
+          category: semgrep
   copyright-license-check:
-    if: ${{ ( inputs.copyright-license-detector && contains('pull_request_target', github.event_name) && github.event.action != 'closed' ) }}
+    if: ${{ ( inputs.copyright-license-detector && contains('pull_request', github.event_name) && github.event.action != 'closed' ) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR head
@@ -101,7 +139,7 @@ jobs:
           repo_name: ${{ github.repository }}
   
   commit-emails-check:
-    if: ${{ inputs.pr-check-emails }}
+    if: ${{ inputs.pr-check-emails && (github.event_name == 'push' || github.event_name == 'pull_request')}}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -110,7 +148,7 @@ jobs:
         uses: qualcomm/commit-emails-check-action@v1.0.0
 
   dependency-review:
-    if: ${{ inputs.dependency-review && github.event.repository.visibility == 'public' && (github.event_name == 'push' || github.event_name == 'pull_request_target') }}
+    if: ${{ inputs.dependency-review && (github.event_name == 'push' || github.event_name == 'pull_request')}}
     runs-on: ubuntu-latest
     steps:
       - name: 'Checkout Repository'
@@ -128,6 +166,22 @@ jobs:
       - name: 'Dependency Review'
         uses: actions/dependency-review-action@v4
         with:
-          base-ref: ${{ steps.setrefs.outputs.base_ref }}
-          head-ref: ${{ steps.setrefs.outputs.head_ref }}
-          fail-on-severity: high  
+          fail-on-severity: high
+  
+  commit-msg-check:
+    if: ${{ inputs.commit-msg-check && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run custom commit check
+        uses: qualcomm/commit-msg-check-action@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          repo: ${{ github.repository }}
+          pr_number: ${{ github.event.pull_request.number }}
+          desc-char-limit: ${{ inputs.desc-char-limit }}
+          sub-char-limit: ${{ inputs.sub-char-limit }}
+          check-blank-line: true
