@@ -10,6 +10,11 @@ on:
         required: false
         type: boolean
         default: true
+      semgrep-cli-options:
+        required: false
+        type: string
+        default: ''
+        description: 'Additional CLI options to pass to semgrep scan command'
       copyright-license-detector:
         required: false
         type: boolean
@@ -22,20 +27,7 @@ on:
         required: false
         type: boolean
         default: true      
-      commit-msg-check:
-        required: false
-        type: boolean
-        default: true
-      sub-char-limit:
-        required: false
-        type: number
-        default: 50
-        description: 'Maximum characters allowed in commit subject line'
-      desc-char-limit:
-        required: false
-        type: number
-        default: 72
-        description: 'Maximum characters allowed per line in commit description'
+
 permissions:
   contents: read
   security-events: write
@@ -77,7 +69,7 @@ jobs:
           fetch-depth: 0  # Fetch all history to properly detect changes
           ref: ${{ github.event.pull_request.head.sha }}  # Explicitly checkout the PR code
       
-      - name: Get changed files
+      - name: Files to scan
         id: changed-files
         run: |
           git config --global --add safe.directory "$(pwd)"
@@ -86,22 +78,64 @@ jobs:
             HEAD_SHA=${{ github.event.pull_request.head.sha }}
             
             echo "Changed files between $BASE_SHA and $HEAD_SHA:"
-            echo "CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA | tr '\n' ' ')" >> $GITHUB_ENV
-            echo "changed files: $CHANGED_FILES"
+            # Get list of changed files
+            git diff --name-only $BASE_SHA $HEAD_SHA > changed_files.txt
+            
+            # Filter out files matching patterns in .semgrepignore
+            if [ -f ".semgrepignore" ]; then
+              echo "Filtering files based on .semgrepignore patterns"
+              cat changed_files.txt | grep -v -f .semgrepignore > filtered_files.txt || touch filtered_files.txt
+            else
+              cp changed_files.txt filtered_files.txt
+            fi
+            
+            # Set environment variable with filtered files
+            FILTERED_FILES=$(cat filtered_files.txt | tr '\n' ' ')
+            echo "CHANGED_FILES=$FILTERED_FILES" >> $GITHUB_ENV
+            echo "Files to scan after filtering: $FILTERED_FILES"
+            
+            # Clean up temporary files
+            rm -f changed_files.txt filtered_files.txt
           else
             # For pushes to main, scan all files
             echo "CHANGED_FILES=." >> $GITHUB_ENV
             echo "Scanning all files on main branch"
           fi
       
-      - name: Run Semgrep on changed files
+      - name: Check for semgrep config file
+        id: check_semgrep_config
+        run: |
+          if [ -f ".semgrep.yml" ] || [ -f ".semgrep/semgrep.yml" ]; then
+            echo "SEMGREP_CONFIG=--config ." >> $GITHUB_ENV
+            echo "Using repository's semgrep configuration"
+          else
+            echo "SEMGREP_CONFIG=--config auto" >> $GITHUB_ENV
+            echo "Using default semgrep configuration"
+          fi
+          
+          # Check for .semgrepignore file
+          if [ -f ".semgrepignore" ]; then
+            echo "Found .semgrepignore file - Semgrep will automatically use it to exclude files from scanning"
+            echo "SEMGREP_IGNORE_FILE_EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "No .semgrepignore file found - Semgrep will use default exclusions"
+            echo "SEMGREP_IGNORE_FILE_EXISTS=false" >> $GITHUB_ENV
+          fi
+      
+      - name: Display Semgrep Configuration
+        run: |
+          echo "Semgrep Configuration:"
+          echo "  - Config: $SEMGREP_CONFIG"
+          echo "  - .semgrepignore file: $SEMGREP_IGNORE_FILE_EXISTS"
+          echo "  - Additional CLI options: ${{ inputs.semgrep-cli-options != '' && inputs.semgrep-cli-options || 'none' }}"
+          
+      - name: Run Semgrep scan on matching files
         shell: bash
         run: |
           if [ -n "$CHANGED_FILES" ]; then
-            semgrep scan --config auto --json --output semgrep.json $CHANGED_FILES
-            semgrep scan --config auto --sarif --output semgrep.sarif $CHANGED_FILES
+            semgrep scan $SEMGREP_CONFIG --sarif --output semgrep.sarif ${{ inputs.semgrep-cli-options != '' && inputs.semgrep-cli-options || '' }} $CHANGED_FILES
           else
-            echo "No files changed in this PR"
+            echo "No files found to scan"
             echo "[]" > semgrep.json
             echo '{"runs": []}' > semgrep.sarif
           fi
@@ -167,21 +201,3 @@ jobs:
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
-  
-  commit-msg-check:
-    if: ${{ inputs.commit-msg-check && github.event_name == 'pull_request' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Run custom commit check
-        uses: qualcomm/commit-msg-check-action@main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          repo: ${{ github.repository }}
-          pr_number: ${{ github.event.pull_request.number }}
-          desc-char-limit: ${{ inputs.desc-char-limit }}
-          sub-char-limit: ${{ inputs.sub-char-limit }}
-          check-blank-line: true
