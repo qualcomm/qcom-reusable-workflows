@@ -36,11 +36,11 @@ on:
         type: number
         default: 50
         description: 'Maximum characters allowed in commit subject line'
-      desc-char-limit:
+      body-char-limit:
         required: false
         type: number
         default: 72
-        description: 'Maximum characters allowed per line in commit description'
+        description: 'Maximum characters allowed per line in commit body'
       check-blank-line:
         required: false
         type: boolean
@@ -175,7 +175,7 @@ jobs:
           fail-on-severity: high  
 
   commit-msg-check:
-    if: ${{ inputs.commit-msg-check && github.event_name == 'pull_request_target' }}
+    if: ${{ inputs.commit-msg-check && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
       - name: Run custom commit check
@@ -183,6 +183,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          desc-char-limit: ${{ inputs.desc-char-limit }}
+          body-char-limit: ${{ inputs.body-char-limit }}
           sub-char-limit: ${{ inputs.sub-char-limit }}
           check-blank-line: ${{ inputs.check-blank-line }}
