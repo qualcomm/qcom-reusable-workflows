@@ -26,8 +26,30 @@ on:
       dependency-review:
         required: false
         type: boolean
-        default: true      
-
+        default: true  
+      commit-msg-check:
+        required: false
+        type: boolean
+        default: false
+      sub-char-limit:
+        required: false
+        type: number
+        default: 50
+        description: 'Maximum characters allowed in commit subject line'
+      desc-char-limit:
+        required: false
+        type: number
+        default: 72
+        description: 'Maximum characters allowed per line in commit description'
+      check-blank-line:
+        required: false
+        type: boolean
+        default: true
+        description: 'Ensures a blank line between the commit subject, body, and Signed-off-by signature'
+    secrets:
+      SEMGREP_APP_TOKEN:
+        required: true
+        
 permissions:
   contents: read
   security-events: write
@@ -148,4 +170,19 @@ jobs:
       - name: 'Dependency Review'
         uses: actions/dependency-review-action@v4
         with:
-          fail-on-severity: high
+          base-ref: ${{ steps.setrefs.outputs.base_ref }}
+          head-ref: ${{ steps.setrefs.outputs.head_ref }}
+          fail-on-severity: high  
+
+  commit-msg-check:
+    if: ${{ inputs.commit-msg-check && github.event_name == 'pull_request_target' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run custom commit check
+        uses: qualcomm/commit-msg-check-action@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          desc-char-limit: ${{ inputs.desc-char-limit }}
+          sub-char-limit: ${{ inputs.sub-char-limit }}
+          check-blank-line: ${{ inputs.check-blank-line }}
