@@ -13,8 +13,8 @@ on:
       semgrep-cli-options:
         required: false
         type: string
-        default: ''
-        description: 'Additional CLI options to pass to semgrep scan command'
+        default: '--config auto'
+        description: 'CLI options for semgrep scan (e.g., "--config p/security-audit --severity ERROR"). Must be valid CLI flags only.'
       copyright-license-detector:
         required: false
         type: boolean
@@ -60,93 +60,41 @@ jobs:
     name: semgrep/ci
     runs-on: ubuntu-latest
 
+    env:
+      # Use baseline scanning for PRs to scan only changes
+      SEMGREP_BASELINE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+      SEMGREP_REPO_NAME: ${{ github.repository }}
+      SEMGREP_COMMIT: ${{ github.sha }}
+      SEMGREP_CLI_OPTIONS: ${{ inputs.semgrep-cli-options }}
+
     container:
       image: semgrep/semgrep:1.125.0
+      
     steps:
-      - name: checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history to properly detect changes
-          ref: ${{ github.event.pull_request.head.sha }}  # Explicitly checkout the PR code
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       
-      - name: Files to scan
-        id: changed-files
-        run: |
-          git config --global --add safe.directory "$(pwd)"
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            BASE_SHA=${{ github.event.pull_request.base.sha }}
-            HEAD_SHA=${{ github.event.pull_request.head.sha }}
-            
-            echo "Changed files between $BASE_SHA and $HEAD_SHA:"
-            # Get list of changed files
-            git diff --name-only $BASE_SHA $HEAD_SHA > changed_files.txt
-            
-            # Filter out files matching patterns in .semgrepignore
-            if [ -f ".semgrepignore" ]; then
-              echo "Filtering files based on .semgrepignore patterns"
-              cat changed_files.txt | grep -v -f .semgrepignore > filtered_files.txt || touch filtered_files.txt
-            else
-              cp changed_files.txt filtered_files.txt
-            fi
-            
-            # Set environment variable with filtered files
-            FILTERED_FILES=$(cat filtered_files.txt | tr '\n' ' ')
-            echo "CHANGED_FILES=$FILTERED_FILES" >> $GITHUB_ENV
-            echo "Files to scan after filtering: $FILTERED_FILES"
-            
-            # Clean up temporary files
-            rm -f changed_files.txt filtered_files.txt
-          else
-            # For pushes to main, scan all files
-            echo "CHANGED_FILES=." >> $GITHUB_ENV
-            echo "Scanning all files on main branch"
-          fi
+      - name: Configure git
+        run: git config --global --add safe.directory "$(pwd)"
       
-      - name: Check for semgrep config file
-        id: check_semgrep_config
+      - name: Run Semgrep
         run: |
-          if [ -f ".semgrep.yml" ] || [ -f ".semgrep/semgrep.yml" ]; then
-            echo "SEMGREP_CONFIG=--config ." >> $GITHUB_ENV
-            echo "Using repository's semgrep configuration"
-          else
-            echo "SEMGREP_CONFIG=--config auto" >> $GITHUB_ENV
-            echo "Using default semgrep configuration"
-          fi
-          
-          # Check for .semgrepignore file
-          if [ -f ".semgrepignore" ]; then
-            echo "Found .semgrepignore file - Semgrep will automatically use it to exclude files from scanning"
-            echo "SEMGREP_IGNORE_FILE_EXISTS=true" >> $GITHUB_ENV
-          else
-            echo "No .semgrepignore file found - Semgrep will use default exclusions"
-            echo "SEMGREP_IGNORE_FILE_EXISTS=false" >> $GITHUB_ENV
-          fi
+          # Run semgrep with only the options passed by consuming workflow
+          # No auto-detection, no default config - consuming workflow must specify rules
+          semgrep scan --sarif --output semgrep.sarif $SEMGREP_CLI_OPTIONS
       
-      - name: Display Semgrep Configuration
-        run: |
-          echo "Semgrep Configuration:"
-          echo "  - Config: $SEMGREP_CONFIG"
-          echo "  - .semgrepignore file: $SEMGREP_IGNORE_FILE_EXISTS"
-          echo "  - Additional CLI options: ${{ inputs.semgrep-cli-options != '' && inputs.semgrep-cli-options || 'none' }}"
-          
-      - name: Run Semgrep scan on matching files
-        shell: bash
-        run: |
-          if [ -n "$CHANGED_FILES" ]; then
-            semgrep scan $SEMGREP_CONFIG --sarif --output semgrep.sarif ${{ inputs.semgrep-cli-options != '' && inputs.semgrep-cli-options || '' }} $CHANGED_FILES
-          else
-            echo "No files found to scan"
-            echo "[]" > semgrep.json
-            echo '{"runs": []}' > semgrep.sarif
-          fi
-      
-      - name: Upload SARIF to github
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
         with:
           sarif_file: semgrep.sarif
           category: semgrep
+
   copyright-license-check:
-    if: ${{ ( inputs.copyright-license-detector && contains('pull_request', github.event_name) && github.event.action != 'closed' ) }}
+    if: ${{ ( inputs.copyright-license-detector && github.event_name == 'pull_request' && github.event.action != 'closed' ) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR head
@@ -193,7 +141,7 @@ jobs:
           if [ "${{github.event_name}}" == "push" ]; then
             echo "base_ref=${{ github.event.before }}" >> $GITHUB_OUTPUT
             echo "head_ref=${{ github.sha }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event_name }}" == "pull_request_target" ]; then
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
             echo "base_ref=${{ github.event.pull_request.base.sha }}" >> $GITHUB_OUTPUT
             echo "head_ref=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
           fi
