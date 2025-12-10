@@ -179,7 +179,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run custom commit check
-        uses: qualcomm/commit-msg-check-action@main
+        uses: qualcomm/commit-msg-check-action@v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
