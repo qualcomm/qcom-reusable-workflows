@@ -46,9 +46,6 @@ on:
         type: boolean
         default: true
         description: 'Ensures a blank line between the commit subject, body, and Signed-off-by signature'
-    secrets:
-      SEMGREP_APP_TOKEN:
-        required: true
         
 permissions:
   contents: read
