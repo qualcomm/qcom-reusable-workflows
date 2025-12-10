@@ -10,6 +10,11 @@ on:
         required: false
         type: boolean
         default: true
+      semgrep-cli-options:
+        required: false
+        type: string
+        default: '--config auto'
+        description: 'CLI options for semgrep scan (e.g., "--config p/security-audit --severity ERROR"). Must be valid CLI flags only.'
       copyright-license-detector:
         required: false
         type: boolean
@@ -21,18 +26,15 @@ on:
       dependency-review:
         required: false
         type: boolean
-        default: true  
-    secrets:
-      SEMGREP_APP_TOKEN:
-        required: true
-        
+        default: true      
+
 permissions:
   contents: read
   security-events: write
   
 jobs:
   repolinter:
-    if: ${{ inputs.repolinter }}
+    if: ${{ inputs.repolinter && (github.event_name == 'push' || github.event_name == 'pull_request') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
@@ -54,27 +56,45 @@ jobs:
           config_url: "https://raw.githubusercontent.com/qualcomm/.github/main/repolint.json"
 
   semgrep-static-analysis:
-    if: ${{ ( inputs.semgrep && contains('pull_request_target', github.event_name) && github.event.action != 'closed' && github.actor != 'dependabot[bot]' ) }}
+    if: ${{ inputs.semgrep && (github.event_name == 'push' || github.event_name == 'pull_request') && github.actor != 'dependabot[bot]' }}
     name: semgrep/ci
     runs-on: ubuntu-latest
 
+    env:
+      # Use baseline scanning for PRs to scan only changes
+      SEMGREP_BASELINE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+      SEMGREP_REPO_NAME: ${{ github.repository }}
+      SEMGREP_COMMIT: ${{ github.sha }}
+      SEMGREP_CLI_OPTIONS: ${{ inputs.semgrep-cli-options }}
+
     container:
       image: semgrep/semgrep:1.125.0
+      
     steps:
-      - uses: actions/checkout@v4
-      - run: semgrep ci --sarif-output=semgrep-report.sarif
-        env:
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-
-      - name: Upload SARIF file for GitHub Advanced Security Dashboard
-        if: ${{ github.event.repository.visibility == 'public' }}
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          sarif_file: semgrep-report.sarif
-          category: semgrep-scan
-  
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      
+      - name: Configure git
+        run: git config --global --add safe.directory "$(pwd)"
+      
+      - name: Run Semgrep
+        run: |
+          # Run semgrep with only the options passed by consuming workflow
+          # No auto-detection, no default config - consuming workflow must specify rules
+          semgrep scan --sarif --output semgrep.sarif $SEMGREP_CLI_OPTIONS
+      
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
   copyright-license-check:
-    if: ${{ ( inputs.copyright-license-detector && contains('pull_request_target', github.event_name) && github.event.action != 'closed' ) }}
+    if: ${{ ( inputs.copyright-license-detector && github.event_name == 'pull_request' && github.event.action != 'closed' ) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR head
@@ -101,7 +121,7 @@ jobs:
           repo_name: ${{ github.repository }}
   
   commit-emails-check:
-    if: ${{ inputs.pr-check-emails }}
+    if: ${{ inputs.pr-check-emails && (github.event_name == 'push' || github.event_name == 'pull_request')}}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -110,7 +130,7 @@ jobs:
         uses: qualcomm/commit-emails-check-action@v1.0.0
 
   dependency-review:
-    if: ${{ inputs.dependency-review && github.event.repository.visibility == 'public' && (github.event_name == 'push' || github.event_name == 'pull_request_target') }}
+    if: ${{ inputs.dependency-review && (github.event_name == 'push' || github.event_name == 'pull_request')}}
     runs-on: ubuntu-latest
     steps:
       - name: 'Checkout Repository'
@@ -121,7 +141,7 @@ jobs:
           if [ "${{github.event_name}}" == "push" ]; then
             echo "base_ref=${{ github.event.before }}" >> $GITHUB_OUTPUT
             echo "head_ref=${{ github.sha }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event_name }}" == "pull_request_target" ]; then
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
             echo "base_ref=${{ github.event.pull_request.base.sha }}" >> $GITHUB_OUTPUT
             echo "head_ref=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
           fi
