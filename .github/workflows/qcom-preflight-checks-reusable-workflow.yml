@@ -26,8 +26,27 @@ on:
       dependency-review:
         required: false
         type: boolean
-        default: true      
-
+        default: true  
+      commit-msg-check:
+        required: false
+        type: boolean
+        default: false
+      sub-char-limit:
+        required: false
+        type: number
+        default: 50
+        description: 'Maximum characters allowed in commit subject line'
+      body-char-limit:
+        required: false
+        type: number
+        default: 72
+        description: 'Maximum characters allowed per line in commit body'
+      check-blank-line:
+        required: false
+        type: boolean
+        default: true
+        description: 'Ensures a blank line between the commit subject, body, and Signed-off-by signature'
+        
 permissions:
   contents: read
   security-events: write
@@ -151,3 +170,16 @@ jobs:
           base-ref: ${{ steps.setrefs.outputs.base_ref }}
           head-ref: ${{ steps.setrefs.outputs.head_ref }}
           fail-on-severity: high  
+
+  commit-msg-check:
+    if: ${{ inputs.commit-msg-check && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run custom commit check
+        uses: qualcomm/commit-msg-check-action@v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          body-char-limit: ${{ inputs.body-char-limit }}
+          sub-char-limit: ${{ inputs.sub-char-limit }}
+          check-blank-line: ${{ inputs.check-blank-line }}
