@@ -1,0 +1,68 @@
+name: Qualcomm Preflight Checks Orchestrator Reusable Workflow
+
+on:
+  workflow_call:
+    inputs:
+      enable-semgrep-scan:
+        required: false
+        type: boolean
+        default: true
+      semgrep-cli-options:
+        required: false
+        type: string
+        default: '--config auto'
+      enable-repolinter-check:
+        required: false
+        type: boolean
+        default: true        
+      enable-copyright-license-check:
+        required: false
+        type: boolean
+        default: true
+      enable-commit-email-check:
+        required: false
+        type: boolean
+        default: true
+      enable-dependency-review:
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  semgrep-scan:
+    if: ${{ inputs.enable-semgrep-scan }}
+    name: Semgrep Scan
+    uses: ./.github/workflows/reusable-semgrep-scan.yml
+    with:
+      semgrep-cli-options: ${{ inputs.semgrep-cli-options }}
+    permissions:
+      contents: read
+      security-events: write
+
+  dependency-review:
+    if: ${{ inputs.enable-dependency-review }}
+    name: Dependency Review
+    uses: ./.github/workflows/reusable-dependency-review.yml
+    permissions:
+      contents: read
+
+  repolinter-check:
+    if: ${{ inputs.enable-repolinter-check }}
+    name: Repolinter Check
+    uses: ./.github/workflows/reusable-repolinter-check.yml
+    permissions:
+      contents: read
+
+  copyright-license-check:
+    if: ${{ inputs.enable-copyright-license-check }}
+    name: Copyright and License Check
+    uses: ./.github/workflows/reusable-copyright-license-check.yml
+    permissions:
+      contents: read
+
+  commit-email-check:
+    if: ${{ inputs.enable-commit-email-check }}
+    name: Commit Email Check
+    uses: ./.github/workflows/reusable-commit-emails-check.yml
+    permissions:
+      contents: read

@@ -1,0 +1,17 @@
+name: Commit Emails Check Reusable Workflow
+on:
+  workflow_call:  
+
+permissions:
+  contents: read
+  
+jobs:
+  run-commit-emails-check:
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+    name: Run Commit Emails Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Run Commit Emails Check Action
+        uses: qualcomm/commit-emails-check-action@v1.0.0

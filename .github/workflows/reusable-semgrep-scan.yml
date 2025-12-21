@@ -1,0 +1,50 @@
+name: Semgrep Scan Reusable Workflow
+on:
+  workflow_call:
+    inputs:
+      semgrep-cli-options:
+        required: false
+        type: string
+        default: '--config auto'
+        description: 'CLI options for semgrep scan (e.g., "--config p/security-audit --severity ERROR"). Must be valid CLI flags only.'
+
+permissions:
+  contents: read
+  security-events: write
+  
+jobs:
+  run-semgrep-scan:
+    if: ${{ (github.event_name == 'push' || github.event_name == 'pull_request') && github.actor != 'dependabot[bot]' }}
+    name: Run Semgrep Scan
+    runs-on: ubuntu-latest
+
+    env:
+      # Use baseline scanning for PRs to scan only changes
+      SEMGREP_BASELINE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+      SEMGREP_REPO_NAME: ${{ github.repository }}
+      SEMGREP_COMMIT: ${{ github.sha }}
+      SEMGREP_CLI_OPTIONS: ${{ inputs.semgrep-cli-options }}
+
+    container:
+      image: semgrep/semgrep:1.125.0
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      
+      - name: Configure git
+        run: git config --global --add safe.directory "$(pwd)"
+      
+      - name: Run Semgrep Scan
+        run: |
+          semgrep scan --sarif --output semgrep.sarif $SEMGREP_CLI_OPTIONS
+      
+      - name: Upload to Security Tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep

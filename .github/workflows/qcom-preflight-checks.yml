@@ -1,0 +1,20 @@
+name: QC Preflight Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  preflight:
+    name: Run QC Preflight Checks
+    uses: ./.github/workflows/reusable-qcom-preflight-checks-orchestrator.yml
+    with:
+      enable-semgrep-scan: true
+      enable-dependency-review: true
+      enable-repolinter-check: true
+      enable-copyright-license-check: true
+      enable-commit-email-check: true
+    permissions:
+      contents: read
+      security-events: write

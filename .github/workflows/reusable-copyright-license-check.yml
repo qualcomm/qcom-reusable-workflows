@@ -1,0 +1,35 @@
+name: Copyright License Check Reusable Workflow
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  
+jobs:
+  run-copyright-license-check:
+    if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
+    name: Run Copyright License Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Full history so we can diff properly
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+ 
+      - name: Add PR base repo as remote and fetch it
+        run: |
+          git remote add upstream https://github.com/${{ github.event.pull_request.base.repo.full_name }}.git
+          git fetch upstream
+ 
+      - name: Generate final patch between base and head
+        run: |
+          git diff upstream/${{ github.event.pull_request.base.ref }} > pr.patch
+          head -n 100 pr.patch
+
+      - name: Run Copyright License Check Action
+        uses: qualcomm/copyright-license-checker-action@v1.0.0
+        with:
+          patch_file: pr.patch
+          repo_name: ${{ github.repository }}
