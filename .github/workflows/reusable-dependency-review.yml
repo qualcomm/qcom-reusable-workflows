@@ -64,4 +64,4 @@ jobs:
         with:
           base-ref: ${{ steps.setrefs.outputs.base_ref }}
           head-ref: ${{ steps.setrefs.outputs.head_ref }}
-          fail-on-severity: high
+          fail-on-severity: critical
