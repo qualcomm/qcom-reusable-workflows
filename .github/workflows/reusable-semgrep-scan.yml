@@ -34,7 +34,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-      
+
       - name: Configure git
         run: git config --global --add safe.directory "$(pwd)"
       
