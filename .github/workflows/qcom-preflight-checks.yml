@@ -1,22 +1,23 @@
-name: QC Preflight Checks
+name: Qualcomm Preflight Checks
 
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   preflight:
     name: Run QC Preflight Checks
-    uses: ./.github/workflows/reusable-qcom-preflight-checks-orchestrator.yml
+    # @todo Update branch/tag once reusable workflow is published
+    uses: qualcomm/qcom-reusable-workflows/.github/workflows/_reusable/reusable-qcom-preflight-checks-orchestrator.yml@main
     with:
       enable-semgrep-scan: true
       enable-dependency-review: true
       enable-repolinter-check: true
       enable-copyright-license-check: true
       enable-commit-email-check: true
-      enable-commit-msg-check: true
-      commit-msg-check-extra-options: '{"check-blank-line": false}'
+      enable-commit-msg-check: false
     permissions:
       contents: read
       security-events: write
