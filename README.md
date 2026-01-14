@@ -2,6 +2,36 @@
 
 This project contains reusable workflows. Do not use directly. See [qualcomm/qcom-actions](https://github.com/qualcomm/qcom-actions) for usage.
 
+## Testing the latest on @main
+
+Create file `.github/workflows/qcom-preflight-checks.yml`:
+
+```yml
+name: QC Preflight Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  preflight:
+    name: Run QC Preflight Checks
+    uses: qualcomm/qcom-reusable-workflows/.github/workflows/reusable-qcom-preflight-checks-orchestrator.yml@main
+    with:
+      enable-semgrep-scan: true
+      enable-dependency-review: true
+      enable-repolinter-check: true
+      enable-copyright-license-check: true
+      enable-commit-email-check: true
+      enable-commit-msg-check: false
+    permissions:
+      contents: read
+      security-events: write
+
+```
+
 ## Branches
 
 **main**: Primary development branch. Contributors should develop submissions based on this branch, and submit pull requests to this branch.
