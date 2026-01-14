@@ -1,0 +1,24 @@
+name: Commit Message Check Reusable Workflow
+on:
+  workflow_call:
+    inputs:      
+      extra-options:
+        required: false
+        type: string
+        default: ''
+        description: 'Extra options as YAML/JSON object string'
+
+permissions:
+  contents: read
+  
+jobs:
+  run-commit-msg-check:
+    name: Run Commit Message Check
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run Commit Message Check Action
+        uses: qualcomm/commit-msg-check-action@v1.0.0
+        with: ${{ fromJSON(inputs.extra-options || '{}') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
