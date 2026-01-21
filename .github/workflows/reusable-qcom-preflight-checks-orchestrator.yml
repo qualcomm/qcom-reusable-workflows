@@ -35,7 +35,7 @@ on:
         required: false
         type: string
         default: ''
-        description: 'Extra options as YAML/JSON object string, e.g., {\"foo\": false}\"'
+        description: 'Extra options as YAML/JSON object string, e.g., {"body-char-limit": 60, "sub-char-limit": 50, "check-blank-line": true}'
 
 jobs:
   semgrep-scan:
