@@ -36,6 +36,15 @@ on:
         type: string
         default: ''
         description: 'Extra options as YAML/JSON object string, e.g., {"body-char-limit": 60, "sub-char-limit": 50, "check-blank-line": true}'
+      enable-armor-checkers:
+        required: false
+        type: boolean
+        default: false
+      armor-checker-options:
+        required: false
+        type: string
+        default: ''
+        description: 'ARMOR checker options as JSON string.e.g., {"build-script":"ci/build.sh","runs-on":{"group":"<group>","labels":["<l1>","<l2>"]}}'
 
 jobs:
   semgrep-scan:
@@ -82,5 +91,14 @@ jobs:
     uses: ./.github/workflows/reusable-commit-msg-check.yml
     with:
       extra-options: ${{ inputs.commit-msg-check-extra-options }}    
+    permissions:
+      contents: read
+
+  armor-checkers:
+    if: ${{ inputs.enable-armor-checkers }}
+    name: ARMOR Compatibility Checkers
+    uses: qualcomm/armor-checkers/.github/workflows/armor-checker.yml@v1.0.0
+    with:
+      armor-checker-options: ${{ inputs.armor-checker-options }}
     permissions:
       contents: read
