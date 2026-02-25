@@ -1,0 +1,43 @@
+name: Update Major Version Tag
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-major-tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to create/update tags
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Parse version and update major tag
+        run: |
+          FULL_TAG="${{ github.event.release.tag_name }}"
+          echo "Release tag : ${FULL_TAG}"
+
+          # Only process tags that match strict semver: vX.Y.Z
+          if [[ ! "${FULL_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::warning::Tag '${FULL_TAG}' is not semver (vX.Y.Z) — skipping major tag update."
+            exit 0
+          fi
+
+          # Extract major tag: v2.0.1 → v2  |  v10.3.0 → v10
+          # ${FULL_TAG%%.*} strips everything from the first '.' onward
+          MAJOR_TAG="${FULL_TAG%%.*}"
+          echo "Major tag   : ${MAJOR_TAG}"
+
+          # Determine whether this is a new major tag or an update
+          if git ls-remote --tags origin "${MAJOR_TAG}" | grep -q "${MAJOR_TAG}"; then
+            echo "Action      : UPDATE ${MAJOR_TAG} → ${FULL_TAG}"
+          else
+            echo "Action      : CREATE ${MAJOR_TAG} (new major release)"
+          fi
+
+          git tag -f "${MAJOR_TAG}" "${{ github.sha }}"
+          git push origin "${MAJOR_TAG}" --force
+
+          echo "✓ ${MAJOR_TAG} now points to ${{ github.sha }} (${FULL_TAG})"
