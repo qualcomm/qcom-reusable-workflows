@@ -15,10 +15,10 @@ jobs:
         uses: actions/checkout@v6
         with:
           persist-credentials: false
-          fetch-depth: 0   # Full history so we can diff properly.
-                                  # On pull_request events, actions/checkout fetches
-                                  # refs/pull/N/merge whose parents are base.sha and
-                                  # head.sha — both are already present after this step.
+          fetch-depth: 0    # Full history so we can diff properly.
+                            # On pull_request events, actions/checkout fetches
+                            # refs/pull/N/merge whose parents are base.sha and
+                            # head.sha — both are already present after this step.
          
  
       - name: Get base and head SHAs (from event payload, no token needed)
