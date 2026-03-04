@@ -33,9 +33,12 @@ jobs:
           echo "base_sha=${BASE_SHA}" >> "$GITHUB_OUTPUT"
           echo "head_sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
 
-      - name: Generate patch between base and head
+      - name: Generate patch for PR changes only (merge-base to head).
         run: |
-          git diff "${{ steps.shas.outputs.base_sha }}" \
+          MERGE_BASE=$(git merge-base "${{ steps.shas.outputs.base_sha }}" \
+                                      "${{ steps.shas.outputs.head_sha }}")
+          echo "Merge base: ${MERGE_BASE}"
+          git diff "${MERGE_BASE}" \
                    "${{ steps.shas.outputs.head_sha }}" \
                    > pr.patch
           head -n 100 pr.patch
