@@ -12,20 +12,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history so we can diff properly
-          ref: ${{ github.event.pull_request.head.ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
- 
-      - name: Add PR base repo as remote and fetch it
+          # Check out the PR's actual head commit (not the synthetic merge ref).
+          # This avoids failures when the PR has merge conflicts, and ensures
+          # the diff matches exactly what GitHub shows in the PR UI.
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Fetch base branch
         run: |
-          git remote add upstream https://github.com/${{ github.event.pull_request.base.repo.full_name }}.git
-          git fetch upstream
- 
-      - name: Generate final patch between base and head
+          git fetch --no-tags --prune origin \
+            "+refs/heads/${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}"
+
+      - name: Generate patch for PR changes only (GitHub PR-style 3-dot diff)
         run: |
-          git diff upstream/${{ github.event.pull_request.base.ref }} > pr.patch
+          BASE="origin/${{ github.event.pull_request.base.ref }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+
+          # GitHub PRs show a three-dot diff: merge-base(base, head) -> head.
+          # Using the live base branch tip (not the stale SHA from the event
+          # payload) ensures the patch always matches the GitHub PR UI diff.
+
+          git diff "${BASE}...${HEAD}" > pr.patch
           head -n 100 pr.patch
 
       - name: Run Copyright License Check Action
