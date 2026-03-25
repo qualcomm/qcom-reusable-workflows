@@ -11,12 +11,13 @@ The `qcom-reusable-workflows` repository provides a collection of reusable GitHu
 The main orchestrator workflow is `reusable-qcom-preflight-checks-orchestrator.yml`, which coordinates the execution of several specialized workflows:
 
 1. **Semgrep Scan** - Static code analysis for security vulnerabilities
-2. **Dependency Review** - Checks for vulnerabilities in dependencies
-3. **Repolinter Check** - Ensures repository follows best practices
-4. **Copyright and License Check** - Verifies proper copyright and license notices
-5. **Commit Email Check** - Validates commit author emails
-6. **Commit Message Check** - Ensures commit messages follow standards (optional)
-7. **ARMOR Compatibility Checkers** - Ensures source code follows API and ABI backward compatibility (optional)
+1. **Dependency Review** - Checks for vulnerabilities in dependencies
+1. **Repolinter Check** - Ensures repository follows best practices
+1. **Copyright and License Check** - Verifies proper copyright and license notices
+1. **Commit Email Check** - Validates commit author emails
+1. **Zizmor Action check** - zizmor is a static analysis tool for GitHub Actions. It can find and fix many common security issues.
+1. **Commit Message Check** - Ensures commit messages follow standards (optional)
+1. **ARMOR Compatibility Checkers** - Ensures source code follows API and ABI backward compatibility (optional)
 
 
 ## Usage
@@ -42,6 +43,7 @@ jobs:
       enable-repolinter-check: true
       enable-copyright-license-check: true
       enable-commit-email-check: true
+      enable-zizmor-action-check: true
       enable-commit-msg-check: false
       enable-armor-checkers: false
     permissions:
@@ -142,6 +144,10 @@ The workflow:
     - `enable-armor-checkers`: Boolean to enable/disable the check (default: `false`)
     - `armor-checker-options`: String containing JSON object with options (default: empty string). To view all available options, please see the link at:https://github.com/qualcomm/armor-checkers
   - Runs on both push and pull request events
+
+- **Zizmor Action**:
+  - **Configuration Options:**
+    - `zizmor-action-options`: String with JSON object with [options](https://github.com/zizmorcore/zizmor-action?tab=readme-ov-file#inputs) (default: empty string) 
 
 For detailed configuration options and default values for each action, please refer to their respective GitHub repositories.
 
