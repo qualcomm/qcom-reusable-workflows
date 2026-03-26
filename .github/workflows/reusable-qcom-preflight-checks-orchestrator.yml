@@ -45,6 +45,16 @@ on:
         type: string
         default: ''
         description: 'ARMOR checker options as JSON string.e.g., {"build-script":"ci/build.sh","runs-on":{"group":"<group>","labels":["<l1>","<l2>"]}}'
+      enable-zizmor-action-check:
+        required: false
+        type: boolean
+        default: true
+        description: 'Enable the zizmor-action job.'
+      zizmor-action-options:
+        required: false
+        type: string
+        default: ''
+        description: 'Zizmor action options as JSON string, e.g., {"persona":"pedantic","min-severity":"medium"}'
 
 jobs:
   semgrep-scan:
@@ -102,3 +112,14 @@ jobs:
       armor-checker-options: ${{ inputs.armor-checker-options }}
     permissions:
       contents: read
+
+  zizmor-action-check:
+    if: ${{ inputs.enable-zizmor-action-check }}
+    name: Zizmor Action
+    uses: ./.github/workflows/reusable-zizmor-action.yml
+    with:
+      zizmor-action-options: ${{ inputs.zizmor-action-options }}
+    permissions:
+      security-events: write
+      contents: read # only needed for private or internal repos
+      actions: read # only needed for private or internal repos
