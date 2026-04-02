@@ -1,0 +1,83 @@
+name: PR To Workflow Details
+
+on:
+  workflow_call:
+    inputs:
+      workflow_id:
+        required: true
+        type: string
+      run_attempt:
+        required: true
+        type: string
+      pr_number:
+        required: true
+        type: string
+
+jobs:
+  fetch-details:
+    name: "Fetch PR and Workflow Run Details"
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Fetch PR details
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          echo "=== PR Details ==="
+          gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}" \
+            --jq '{
+              number: .number,
+              title: .title,
+              state: .state,
+              author: .user.login,
+              base_branch: .base.ref,
+              head_branch: .head.ref,
+              created_at: .created_at,
+              updated_at: .updated_at,
+              url: .html_url,
+              base_sha: .base.sha,
+              head_sha: .head.sha,
+              base_repo: .base.repo.full_name,
+              head_repo: .head.repo.full_name
+            }' > pr-details.json
+          cat pr-details.json
+
+      - name: Fetch Workflow Run Attempt details
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          WORKFLOW_ID: ${{ inputs.workflow_id }}
+          RUN_ATTEMPT: ${{ inputs.run_attempt }}
+        run: |
+          echo "=== Workflow Run Attempt Details ==="
+          gh api "repos/${GH_REPO}/actions/runs/${WORKFLOW_ID}/attempts/${RUN_ATTEMPT}" \
+            --jq '{
+              run_id: .id,
+              workflow_name: .name,
+              status: .status,
+              conclusion: .conclusion,
+              run_number: .run_number,
+              run_attempt: .run_attempt,
+              triggered_by: .triggering_actor.login,
+              created_at: .created_at,
+              updated_at: .updated_at,
+              url: .html_url
+            }' > workflow-run-details.json
+          cat workflow-run-details.json
+
+      - name: Merge into single JSON
+        run: |
+          jq -s '{pull_request: .[0], workflow_run: .[1]}' pr-details.json workflow-run-details.json > pr-to-workflow-dependency.json
+          echo "=== Combined PR and Workflow Details ==="
+          cat pr-to-workflow-dependency.json
+
+      - name: Upload gathered details
+        uses: actions/upload-artifact@v6
+        with:
+          name: PR To Workflow Details
+          path: pr-to-workflow-dependency.json
