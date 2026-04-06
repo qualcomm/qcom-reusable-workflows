@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run Commit Message Check Action
-        uses: qualcomm/commit-msg-check-action@v1.0.0
-        with: ${{ fromJSON(inputs.extra-options || '{}') }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: qualcomm/commit-msg-check-action@v2.0.0
+        with:
+              base: ${{ github.event.pull_request.base.sha }}
+              head: ${{ github.event.pull_request.head.sha }}
