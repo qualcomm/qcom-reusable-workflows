@@ -18,9 +18,11 @@ jobs:
       enable-repolinter-check: true
       enable-copyright-license-check: true
       enable-commit-email-check: true
+      enable-zizmor-action-check: true
       enable-commit-msg-check: false # change to true to see some commit message check failures
       commit-msg-check-extra-options: '{"check-blank-line": false}'
       enable-armor-checkers: false # change to true to run API/ABI backward compatibility checks
     permissions:
+      actions: read
       contents: read
       security-events: write
