@@ -23,7 +23,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - name: Run Commit Message Check Action
-        uses: qualcomm/commit-msg-check-action@v2.0.0
+        uses: qualcomm/commit-msg-check-action@v2
         with:
           base: ${{ github.event.pull_request.base.sha }}
           head: ${{ github.event.pull_request.head.sha }}
