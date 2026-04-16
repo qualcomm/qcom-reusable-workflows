@@ -25,7 +25,7 @@ jobs:
       - name: Prepare action options
         id: prepare-options
         env:
-          EXTRA_OPTIONS: ${{ inputs.extra-options }}
+          EXTRA_OPTIONS: ${{ inputs.extra-options || '{}' }}
         run: |
           FIXED='{"base":"${{ github.event.pull_request.base.sha }}","head":"${{ github.event.pull_request.head.sha }}"}'
           MERGED=$(printf '%s\n%s' "$EXTRA_OPTIONS" "$FIXED" | jq -sc '.[0] * .[1]')
