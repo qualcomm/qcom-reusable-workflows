@@ -5,7 +5,7 @@ on:
       extra-options:
         required: false
         type: string
-        default: ''
+        default: '{}'
         description: 'Extra options as YAML/JSON object string'
 
 permissions:
@@ -22,8 +22,14 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+      - name: Prepare action options
+        id: prepare-options
+        env:
+          EXTRA_OPTIONS: ${{ inputs.extra-options || '{}' }}
+        run: |
+          FIXED='{"base":"${{ github.event.pull_request.base.sha }}","head":"${{ github.event.pull_request.head.sha }}"}'
+          MERGED=$(printf '%s\n%s' "$EXTRA_OPTIONS" "$FIXED" | jq -sc '.[0] * .[1]')
+          echo "options=$MERGED" >> "$GITHUB_OUTPUT"
       - name: Run Commit Message Check Action
         uses: qualcomm/commit-msg-check-action@v2
-        with:
-          base: ${{ github.event.pull_request.base.sha }}
-          head: ${{ github.event.pull_request.head.sha }}
+        with: ${{ fromJSON(steps.prepare-options.outputs.options) }}
