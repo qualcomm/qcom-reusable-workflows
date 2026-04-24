@@ -14,19 +14,28 @@ jobs:
       - name: Checkout PR head
         uses: actions/checkout@v6
         with:
-          persist-credentials: false
-          fetch-depth: 0  # Full history so we can diff properly
-          ref: ${{ github.event.pull_request.head.ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0    # Full history so we can diff properly.
+                            # On pull_request events, actions/checkout fetches
+                            # refs/pull/N/merge whose parents are base.sha and
+                            # head.sha — both are already present after this step.
+         
  
-      - name: Add PR base repo as remote and fetch it
+      - name: Get base and head SHAs (from event payload, no token needed)
+        id: shas
         run: |
-          git remote add upstream https://github.com/${{ github.event.pull_request.base.repo.full_name }}.git
-          git fetch upstream
- 
-      - name: Generate final patch between base and head
+          git fetch --no-tags --prune origin \
+            "+refs/heads/${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}"
+
+      - name: Generate patch for PR changes only (GitHub PR-style 3-dot diff)
         run: |
-          git diff upstream/${{ github.event.pull_request.base.ref }} > pr.patch
+          BASE="origin/${{ github.event.pull_request.base.ref }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+
+          # GitHub PRs show a three-dot diff: merge-base(base, head) -> head.
+          # Using the live base branch tip (not the stale SHA from the event
+          # payload) ensures the patch always matches the GitHub PR UI diff.
+
+          git diff "${BASE}...${HEAD}" > pr.patch
           head -n 100 pr.patch
 
       - name: Run Copyright License Check Action
