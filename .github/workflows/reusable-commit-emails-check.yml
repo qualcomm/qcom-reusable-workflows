@@ -7,7 +7,7 @@ permissions:
   
 jobs:
   run-commit-emails-check:
-    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'pull_request' }}
     name: Run Commit Emails Check
     runs-on: ubuntu-latest
     steps:
