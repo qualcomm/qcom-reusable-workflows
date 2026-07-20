@@ -39,7 +39,7 @@ jobs:
           head -n 100 pr.patch
 
       - name: Run Copyright License Check Action
-        uses: qualcomm/copyright-license-checker-action@v1.2.0
+        uses: qualcomm/copyright-license-checker-action@f2293b77d340fe6df98bc2113a7cfe37d5cd32ca
         with:
           patch_file: pr.patch
           repo_name: ${{ github.repository }}
