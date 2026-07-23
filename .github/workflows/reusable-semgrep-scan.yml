@@ -5,7 +5,7 @@ on:
       semgrep-cli-options:
         required: false
         type: string
-        default: '--config auto'
+        default: '--config auto --config Semgrep_Rules/rules.yaml'
         description: 'CLI options for semgrep scan (e.g., "--config p/security-audit --severity ERROR"). Must be valid CLI flags only.'
 
 permissions:
