@@ -1,0 +1,4198 @@
+rules:
+  - id: c-cast-array-oob
+    languages:
+      - c
+      - cpp
+    message: >-
+      High-risk out-of-bounds: array cast to different type but loop uses byte
+      size.
+    severity: ERROR
+    patterns:
+      - pattern: |
+          $TYPE1 $ARR[$N];
+          ...
+          for ($INIT; $I < sizeof($ARR); $I++) {
+            ...
+            (($TYPE2*)$ARR)[$I] = $VAL;
+          }
+
+      - metavariable-regex:
+          metavariable: $TYPE1
+          regex: '^(?:unsigned |signed )?char$'
+
+      - metavariable-regex:
+          metavariable: $TYPE2
+          regex: ^(?!char$).+
+
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe:
+        - CWE-119
+        - CWE-787
+
+  - id: c-unsafe-sprintf-buffer-overflow
+    languages:
+      - c
+      - cpp
+    message: >-
+      Possible buffer overflow: sprintf does not check buffer bounds. Use
+      snprintf instead.
+    severity: ERROR
+    patterns:
+      - pattern: sprintf($BUF, $FMT, ...)
+      - pattern-inside: |
+          $TYPE $BUF[$SIZE];
+    metadata:
+      category: security
+      cwe: CWE-119
+
+  - id: c-unsafe-string-functions
+    languages:
+      - c
+      - cpp
+    message: Unsafe string handling function may cause buffer overflow.
+    severity: WARNING
+    pattern-either:
+      - pattern: strcpy($DST, $SRC)
+      - pattern: strcat($DST, $SRC)
+      - pattern: gets($BUF)
+      - pattern: sprintf($DST, ...)
+    metadata:
+      category: security
+      cwe:
+        - CWE-119
+        - CWE-787
+
+  ###########################################################################
+  # Division by variable whose last visible assignment value is zero.
+  ###########################################################################
+  - id: c.division-by-zero.assigned-zero-variable
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Division or modulo by variable '$DIVISOR' whose last visible assignment
+      value is zero.
+    patterns:
+      - pattern: |
+          $DIVISOR = $ZERO;
+          ...
+          $USE;
+
+      - metavariable-pattern:
+          metavariable: $USE
+          pattern-either:
+            - pattern: $NUM / $DIVISOR
+            - pattern: $NUM % $DIVISOR
+            - pattern: $NUM /= $DIVISOR
+            - pattern: $NUM %= $DIVISOR
+
+      - pattern-not: |
+          $DIVISOR = $ZERO;
+          ...
+          $DIVISOR = $OTHER;
+          ...
+          $USE;
+
+      - metavariable-regex:
+          metavariable: $ZERO
+          regex: ^0(?:\.0+)?[fFlLuU]*$
+
+    metadata:
+      category: security
+      confidence: high
+      cwe:
+        - CWE-369
+
+  ###########################################################################
+  # Division by variable whose last visible declaration value is zero.
+  ###########################################################################
+  - id: c.division-by-zero.declared-zero-variable
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Division or modulo by variable '$DIVISOR' whose last visible declared
+      value is zero.
+    patterns:
+      - pattern: |
+          $TYPE $DIVISOR = $ZERO;
+          ...
+          $USE;
+
+      - metavariable-pattern:
+          metavariable: $USE
+          pattern-either:
+            - pattern: $NUM / $DIVISOR
+            - pattern: $NUM % $DIVISOR
+            - pattern: $NUM /= $DIVISOR
+            - pattern: $NUM %= $DIVISOR
+
+      - pattern-not: |
+          $TYPE $DIVISOR = $ZERO;
+          ...
+          $DIVISOR = $OTHER;
+          ...
+          $USE;
+
+      - metavariable-regex:
+          metavariable: $ZERO
+          regex: ^0(?:\.0+)?[fFlLuU]*$
+
+    metadata:
+      category: security
+      confidence: high
+      cwe:
+        - CWE-369
+
+  ###########################################################################
+  # Division by zero: literal zero divisor.
+  ###########################################################################
+  - id: c.division-by-zero.literal
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: Division or modulo by literal zero.
+    patterns:
+      - pattern-either:
+          - pattern: $NUM / $ZERO
+          - pattern: $NUM % $ZERO
+          - pattern: $NUM /= $ZERO
+          - pattern: $NUM %= $ZERO
+
+      - metavariable-regex:
+          metavariable: $ZERO
+          regex: ^0(?:\.0+)?[fFlLuU]*$
+
+    metadata:
+      category: security
+      confidence: high
+      cwe:
+        - CWE-369
+
+  ###########################################################################
+  # Floating-point loop iterator can become zero in ascending loop.
+  ###########################################################################
+  - id: c.division-by-zero.loop-iterator-float-ascending
+    languages:
+      - c
+      - cpp
+    severity: WARNING
+    message: >-
+      Possible floating-point division by zero: loop iterator '$I' may become
+      zero during this loop and is used as divisor.
+    patterns:
+      - pattern: |
+          for ($FTYPE $I = $START; $COND; $I += $STEP) {
+            ...
+            $NUM / $I;
+            ...
+          }
+
+      - metavariable-regex:
+          metavariable: $FTYPE
+          regex: ^(?:float|double)$
+
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            - pattern: $I <= $END
+            - pattern: $I < $END
+
+      - metavariable-regex:
+          metavariable: $START
+          regex: ^-?[0-9]+(?:\.[0-9]+)?$
+
+      - metavariable-regex:
+          metavariable: $END
+          regex: ^-?[0-9]+(?:\.[0-9]+)?$
+
+      - metavariable-comparison:
+          metavariable: $START
+          comparison: float($START) <= 0.0
+
+      - metavariable-comparison:
+          metavariable: $END
+          comparison: float($END) >= 0.0
+
+    metadata:
+      category: security
+      confidence: medium
+      cwe:
+        - CWE-369
+
+  ###########################################################################
+  # Floating-point loop iterator can become zero in descending loop.
+  ###########################################################################
+  - id: c.division-by-zero.loop-iterator-float-descending
+    languages:
+      - c
+      - cpp
+    severity: WARNING
+    message: >-
+      Possible floating-point division by zero: loop iterator '$I' may become
+      zero during this descending loop and is used as divisor.
+    patterns:
+      - pattern: |
+          for ($FTYPE $I = $START; $COND; $I -= $STEP) {
+            ...
+            $NUM / $I;
+            ...
+          }
+
+      - metavariable-regex:
+          metavariable: $FTYPE
+          regex: ^(?:float|double)$
+
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            - pattern: $I >= $END
+            - pattern: $I > $END
+
+      - metavariable-regex:
+          metavariable: $START
+          regex: ^-?[0-9]+(?:\.[0-9]+)?$
+
+      - metavariable-regex:
+          metavariable: $END
+          regex: ^-?[0-9]+(?:\.[0-9]+)?$
+
+      - metavariable-comparison:
+          metavariable: $START
+          comparison: float($START) >= 0.0
+
+      - metavariable-comparison:
+          metavariable: $END
+          comparison: float($END) <= 0.0
+
+    metadata:
+      category: security
+      confidence: medium
+      cwe:
+        - CWE-369
+
+  ###########################################################################
+  # Integer loop iterator can become zero in ascending loop.
+  ###########################################################################
+  - id: c.division-by-zero.loop-iterator-int-ascending
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Possible division by zero: loop iterator '$I' can be zero during this
+      ascending loop and is used as divisor.
+    patterns:
+      - pattern: |
+          for ($TYPE $I = $START; $COND; $INC) {
+            ...
+            $USE;
+            ...
+          }
+
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            - pattern: $I <= $END
+            - pattern: $I < $END
+
+      - metavariable-pattern:
+          metavariable: $INC
+          pattern-either:
+            - pattern: $I++
+            - pattern: ++$I
+
+      - metavariable-pattern:
+          metavariable: $USE
+          pattern-either:
+            - pattern: $NUM / $I
+            - pattern: $NUM % $I
+
+      - metavariable-regex:
+          metavariable: $START
+          regex: ^-?[0-9]+$
+
+      - metavariable-regex:
+          metavariable: $END
+          regex: ^-?[0-9]+$
+
+      - metavariable-comparison:
+          metavariable: $START
+          comparison: int($START) <= 0
+
+      - metavariable-comparison:
+          metavariable: $END
+          comparison: int($END) >= 0
+
+    metadata:
+      category: security
+      confidence: high
+      cwe:
+        - CWE-369
+
+  ###########################################################################
+  # Integer loop iterator can become zero in descending loop.
+  ###########################################################################
+  - id: c.division-by-zero.loop-iterator-int-descending
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Possible division by zero: loop iterator '$I' can be zero during this
+      descending loop and is used as divisor.
+    patterns:
+      - pattern: |
+          for ($TYPE $I = $START; $COND; $DEC) {
+            ...
+            $USE;
+            ...
+          }
+
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            - pattern: $I >= $END
+            - pattern: $I > $END
+
+      - metavariable-pattern:
+          metavariable: $DEC
+          pattern-either:
+            - pattern: $I--
+            - pattern: --$I
+
+      - metavariable-pattern:
+          metavariable: $USE
+          pattern-either:
+            - pattern: $NUM / $I
+            - pattern: $NUM % $I
+
+      - metavariable-regex:
+          metavariable: $START
+          regex: ^-?[0-9]+$
+
+      - metavariable-regex:
+          metavariable: $END
+          regex: ^-?[0-9]+$
+
+      - metavariable-comparison:
+          metavariable: $START
+          comparison: int($START) >= 0
+
+      - metavariable-comparison:
+          metavariable: $END
+          comparison: int($END) <= 0
+
+    metadata:
+      category: security
+      confidence: high
+      cwe:
+        - CWE-369
+
+  - id: c.fnh-might.free-stack-array-alias
+    mode: taint
+    languages:
+      - c
+      - cpp
+    severity: WARNING
+    message: >-
+      Possible free of non-heap memory. This pointer may alias a local stack/static
+      array and later be passed to free(). Only memory allocated by malloc(),
+      calloc(), or realloc() should be released with free().
+    metadata:
+      cwe:
+        - "CWE-590: Free of Memory not on the Heap"
+      bug_type: "freeing possible non-heap memory"
+      checker: "FNH.MIGHT"
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      category: security
+      technology:
+        - c
+        - cpp
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  {
+                    ...
+                    $ATYPE $ARR[$SIZE];
+                    ...
+                  }
+              - pattern-inside: |
+                  {
+                    ...
+                    $ATYPE $ARR[$SIZE] = ...;
+                    ...
+                  }
+              - pattern-inside: |
+                  {
+                    ...
+                    $ATYPE $ARR[] = ...;
+                    ...
+                  }
+              - pattern-inside: |
+                  {
+                    ...
+                    static $ATYPE $ARR[$SIZE];
+                    ...
+                  }
+              - pattern-inside: |
+                  {
+                    ...
+                    static $ATYPE $ARR[$SIZE] = ...;
+                    ...
+                  }
+              - pattern-inside: |
+                  {
+                    ...
+                    static $ATYPE $ARR[] = ...;
+                    ...
+                  }
+          - pattern-either:
+              - pattern: $PTYPE *$PTR = $RHS;
+              - pattern: $PTR = $RHS;
+          - metavariable-pattern:
+              metavariable: $RHS
+              pattern-either:
+                - pattern: $ARR
+                - pattern: '&$ARR[$IDX]'
+          - focus-metavariable: $PTR
+    pattern-sinks:
+      - patterns:
+          - pattern: free($PTR)
+          - pattern-not: free(NULL)
+          - pattern-not: free(nullptr)
+          - focus-metavariable: $PTR
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: malloc(...)
+          - pattern: calloc(...)
+          - pattern: realloc(...)
+          - pattern: new $TYPE
+          - pattern: new $TYPE(...)
+          - pattern: new $TYPE[$SIZE]
+          - pattern: "NULL"
+          - pattern: nullptr
+
+  - id: c.fum-gen-might.free-possibly-uninitialized-pointer
+    languages:
+      - c
+      - cpp
+    severity: WARNING
+    message: >-
+      Possible freeing of unallocated memory. The pointer appears to be declared
+      without initialization and is only conditionally assigned before being passed
+      to free(). If the allocation branch is not taken, free() may receive an
+      uninitialized pointer, causing undefined behavior, heap corruption, or a
+      crash.
+    metadata:
+      cwe:
+        - "CWE-824: Access of Uninitialized Pointer"
+        - "CWE-590: Free of Memory not on the Heap"
+      checker: "FUM.GEN.MIGHT"
+      bug_type: "freeing possibly unallocated or uninitialized memory"
+      category: security
+      technology:
+        - c
+        - cpp
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      precision: MEDIUM
+      description: >-
+        Detects local pointer variables that are declared without initialization,
+        conditionally assigned heap memory, and then released with free() outside
+        the conditional allocation path.
+    patterns:
+      - pattern: |
+          $TYPE *$PTR;
+          ...
+          if ($COND) {
+            ...
+            $PTR = $ALLOC;
+            ...
+          }
+          ...
+          free($PTR);
+      - metavariable-pattern:
+          metavariable: $ALLOC
+          pattern-either:
+            - pattern: malloc(...)
+            - pattern: calloc(...)
+            - pattern: realloc($OLD, ...)
+
+      # Safe: pointer is explicitly initialized before the conditional allocation.
+      - pattern-not: |
+          $TYPE *$PTR;
+          ...
+          $PTR = ...;
+          ...
+          if ($COND) {
+            ...
+            $PTR = $ALLOC;
+            ...
+          }
+          ...
+          free($PTR);
+
+      # Safe: both branches assign the pointer.
+      - pattern-not: |
+          $TYPE *$PTR;
+          ...
+          if ($COND) {
+            ...
+            $PTR = ...;
+            ...
+          } else {
+            ...
+            $PTR = ...;
+            ...
+          }
+          ...
+          free($PTR);
+
+  ###########################################################################
+  # RN.INDEX - pointer arithmetic form
+  ###########################################################################
+  - id: c.rn-index.pointer-arithmetic-before-negative-check
+    languages:
+      - c
+      - cpp
+    severity: WARNING
+    message: >-
+      RN.INDEX: Offset/index '$IDX' is used in pointer arithmetic on '$BUF'
+      before a later negative-value check. If '$IDX' can be negative, '$BUF +
+      $IDX' may point before the buffer.
+    metadata:
+      checker: RN.INDEX
+      category: security
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      bug_type: suspicious pointer offset before negative check
+      cwe:
+        - "CWE-129: Improper Validation of Array Index"
+        - "CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer"
+        - "CWE-125: Out-of-bounds Read"
+        - "CWE-787: Out-of-bounds Write"
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-either:
+          # Assignment from pointer arithmetic.
+          - pattern: |
+              $PTR = $BUF + $IDX;
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $TYPE *$PTR = $BUF + $IDX;
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $PTR = $IDX + $BUF;
+              ...
+              if ($COND) {
+                ...
+              }
+
+          # Pointer arithmetic passed to function/macro.
+          - pattern: |
+              $FUNC(..., $BUF + $IDX, ...);
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $FUNC(..., $IDX + $BUF, ...);
+              ...
+              if ($COND) {
+                ...
+              }
+
+          # Dereference of pointer arithmetic.
+          - pattern: |
+              $VAL = *($BUF + $IDX);
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              *($BUF + $IDX) = $VAL;
+              ...
+              if ($COND) {
+                ...
+              }
+
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            - pattern: $IDX < 0
+            - pattern: $IDX <= -1
+            - pattern: 0 > $IDX
+            - pattern: -1 >= $IDX
+            - pattern: $IDX < 0 || $OTHER
+            - pattern: $OTHER || $IDX < 0
+            - pattern: unlikely($IDX < 0)
+            - pattern: WARN_ON($IDX < 0)
+
+      # Suppress obvious prior reject checks.
+      - pattern-not-inside: |
+          if ($IDX < 0) return $VAL;
+          ...
+          $BUF + $IDX
+      - pattern-not-inside: |
+          if ($IDX < 0) goto $LABEL;
+          ...
+          $BUF + $IDX
+      - pattern-not-inside: |
+          if ($IDX < 0) return $VAL;
+          ...
+          $IDX + $BUF
+      - pattern-not-inside: |
+          if ($IDX < 0) goto $LABEL;
+          ...
+          $IDX + $BUF
+
+      # Suppress obvious allow guard.
+      - pattern-not-inside: |
+          if ($IDX >= 0) {
+            ...
+            $BUF + $IDX
+            ...
+          }
+      - pattern-not-inside: |
+          if ($IDX >= 0) {
+            ...
+            $IDX + $BUF
+            ...
+          }
+
+      - focus-metavariable: $IDX
+
+  ###########################################################################
+  # RN.INDEX - signed integer parameter, high-signal driver/helper form
+  ###########################################################################
+  - id: c.rn-index.signed-parameter-used-before-negative-check
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      RN.INDEX: Signed integer parameter '$IDX' is used as an index before it is
+      checked for being negative. Validate '$IDX >= 0' before using it in
+      '$BUF[$IDX]'.
+    metadata:
+      checker: RN.INDEX
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      bug_type: signed index parameter used before negative check
+      cwe:
+        - "CWE-129: Improper Validation of Array Index"
+        - "CWE-125: Out-of-bounds Read"
+        - "CWE-787: Out-of-bounds Write"
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-inside: |
+          $RET $FUNC(..., $ITYPE $IDX, ...) {
+            ...
+          }
+
+      - metavariable-regex:
+          metavariable: $ITYPE
+          regex: '^(?:signed\s+)?(?:int|short|long|long long|s8|s16|s32|s64|int8_t|int16_t|int32_t|int64_t|ssize_t|ptrdiff_t|loff_t|__s8|__s16|__s32|__s64)$'
+
+      - pattern-either:
+          - pattern: |
+              $DST = $BUF[$IDX];
+              ...
+              if ($IDX < 0) {
+                ...
+              }
+          - pattern: |
+              $TYPE $DST = $BUF[$IDX];
+              ...
+              if ($IDX < 0) {
+                ...
+              }
+          - pattern: |
+              $BUF[$IDX] = $VAL;
+              ...
+              if ($IDX < 0) {
+                ...
+              }
+          - pattern: |
+              $CALL(..., $BUF[$IDX], ...);
+              ...
+              if ($IDX < 0) {
+                ...
+              }
+          - pattern: |
+              $CALL(..., &$BUF[$IDX], ...);
+              ...
+              if ($IDX < 0) {
+                ...
+              }
+
+      # Suppress prior validation.
+      - pattern-not-inside: |
+          if ($IDX < 0) return $VAL;
+          ...
+          $BUF[$IDX]
+      - pattern-not-inside: |
+          if ($IDX < 0) goto $LABEL;
+          ...
+          $BUF[$IDX]
+      - pattern-not-inside: |
+          if ($IDX >= 0) {
+            ...
+            $BUF[$IDX]
+            ...
+          }
+
+      - focus-metavariable: $IDX
+
+  ###########################################################################
+  # RN.INDEX
+  # Index is used in an array/buffer access before a later negative check.
+  ###########################################################################
+  - id: c.rn-index.use-before-negative-check
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      RN.INDEX: Index '$IDX' is used to access buffer/array '$BUF' before a
+      later negative-value check. If '$IDX' can be negative, the access may read
+      or write before the start of the buffer. Move the negative check before
+      '$BUF[$IDX]'.
+    metadata:
+      checker: RN.INDEX
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      bug_type: suspicious use of index before negative check
+      cwe:
+        - "CWE-129: Improper Validation of Array Index"
+        - "CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer"
+        - "CWE-125: Out-of-bounds Read"
+        - "CWE-787: Out-of-bounds Write"
+      technology:
+        - c
+        - cpp
+      notes:
+        - "Designed for C drivers/kernel-style code."
+        - "Flags array/buffer index use before later idx < 0 style checks."
+    patterns:
+      - pattern-either:
+          # Read from buffer.
+          - pattern: |
+              $DST = $BUF[$IDX];
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $TYPE $DST = $BUF[$IDX];
+              ...
+              if ($COND) {
+                ...
+              }
+
+          # Write to buffer.
+          - pattern: |
+              $BUF[$IDX] = $VAL;
+              ...
+              if ($COND) {
+                ...
+              }
+
+          # Compound writes.
+          - pattern: |
+              $BUF[$IDX] += $VAL;
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $BUF[$IDX] -= $VAL;
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $BUF[$IDX] |= $VAL;
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $BUF[$IDX] &= $VAL;
+              ...
+              if ($COND) {
+                ...
+              }
+
+          # Increment/decrement indexed slot.
+          - pattern: |
+              $BUF[$IDX]++;
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              ++$BUF[$IDX];
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $BUF[$IDX]--;
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              --$BUF[$IDX];
+              ...
+              if ($COND) {
+                ...
+              }
+
+          # Address of indexed element.
+          - pattern: |
+              $PTR = &$BUF[$IDX];
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $TYPE *$PTR = &$BUF[$IDX];
+              ...
+              if ($COND) {
+                ...
+              }
+
+          # Indexed value passed to function/macro.
+          - pattern: |
+              $FUNC(..., $BUF[$IDX], ...);
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $FUNC(..., &$BUF[$IDX], ...);
+              ...
+              if ($COND) {
+                ...
+              }
+
+          # Return indexed value before later negative check.
+          - pattern: |
+              return $BUF[$IDX];
+              ...
+              if ($COND) {
+                ...
+              }
+
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            # Direct negative reject checks.
+            - pattern: $IDX < 0
+            - pattern: $IDX <= -1
+            - pattern: 0 > $IDX
+            - pattern: -1 >= $IDX
+
+            # Combined reject checks with lower bound.
+            - pattern: $IDX < 0 || $OTHER
+            - pattern: $OTHER || $IDX < 0
+            - pattern: $IDX <= -1 || $OTHER
+            - pattern: $OTHER || $IDX <= -1
+            - pattern: 0 > $IDX || $OTHER
+            - pattern: $OTHER || 0 > $IDX
+
+            # Common driver/helper wrappers.
+            - pattern: unlikely($IDX < 0)
+            - pattern: unlikely($IDX <= -1)
+            - pattern: WARN_ON($IDX < 0)
+            - pattern: WARN_ON($IDX <= -1)
+
+      - pattern-not-inside: |
+          if ($IDX < 0) return $VAL;
+          ...
+          $BUF[$IDX]
+      - pattern-not-inside: |
+          if ($IDX <= -1) return $VAL;
+          ...
+          $BUF[$IDX]
+      - pattern-not-inside: |
+          if (0 > $IDX) return $VAL;
+          ...
+          $BUF[$IDX]
+      - pattern-not-inside: |
+          if ($IDX < 0) goto $LABEL;
+          ...
+          $BUF[$IDX]
+      - pattern-not-inside: |
+          if ($IDX <= -1) goto $LABEL;
+          ...
+          $BUF[$IDX]
+      - pattern-not-inside: |
+          if (0 > $IDX) goto $LABEL;
+          ...
+          $BUF[$IDX]
+
+      - pattern-not-inside: |
+          if ($IDX >= 0) {
+            ...
+            $BUF[$IDX]
+            ...
+          }
+      - pattern-not-inside: |
+          if (0 <= $IDX) {
+            ...
+            $BUF[$IDX]
+            ...
+          }
+      - pattern-not-inside: |
+          if ($IDX > -1) {
+            ...
+            $BUF[$IDX]
+            ...
+          }
+
+      - focus-metavariable: $IDX
+
+  - id: cpp.fnh-might.delete-stack-array-alias
+    mode: taint
+    languages:
+      - c
+      - cpp
+    severity: WARNING
+    message: >-
+      Possible delete/delete[] of non-heap memory. This pointer may alias a local
+      stack/static array and later be deleted. Only memory allocated with new
+      should be released with delete, and only memory allocated with new[] should
+      be released with delete[].
+    metadata:
+      cwe:
+        - "CWE-590: Free of Memory not on the Heap"
+      bug_type: "deleting possible non-heap memory"
+      checker: "FNH.MIGHT"
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      category: security
+      technology:
+        - cpp
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  {
+                    ...
+                    $ATYPE $ARR[$SIZE];
+                    ...
+                  }
+              - pattern-inside: |
+                  {
+                    ...
+                    $ATYPE $ARR[$SIZE] = ...;
+                    ...
+                  }
+              - pattern-inside: |
+                  {
+                    ...
+                    $ATYPE $ARR[] = ...;
+                    ...
+                  }
+              - pattern-inside: |
+                  {
+                    ...
+                    static $ATYPE $ARR[$SIZE];
+                    ...
+                  }
+              - pattern-inside: |
+                  {
+                    ...
+                    static $ATYPE $ARR[$SIZE] = ...;
+                    ...
+                  }
+              - pattern-inside: |
+                  {
+                    ...
+                    static $ATYPE $ARR[] = ...;
+                    ...
+                  }
+          - pattern-either:
+              - pattern: $PTYPE *$PTR = $RHS;
+              - pattern: $PTR = $RHS;
+          - metavariable-pattern:
+              metavariable: $RHS
+              pattern-either:
+                - pattern: $ARR
+                - pattern: '&$ARR[$IDX]'
+          - focus-metavariable: $PTR
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: delete $PTR;
+              - pattern: delete[] $PTR;
+          - pattern-not: delete nullptr;
+          - pattern-not: delete[] nullptr;
+          - focus-metavariable: $PTR
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: malloc(...)
+          - pattern: calloc(...)
+          - pattern: realloc(...)
+          - pattern: new $TYPE
+          - pattern: new $TYPE(...)
+          - pattern: new $TYPE[$SIZE]
+          - pattern: "NULL"
+          - pattern: nullptr
+
+  - id: cpp.fum-gen-might.delete-possibly-uninitialized-pointer
+    languages:
+      - c
+      - cpp
+    severity: WARNING
+    message: >-
+      Possible delete/delete[] of unallocated memory. The pointer appears to be
+      declared without initialization and is only conditionally assigned before
+      being deleted. If the allocation branch is not taken, delete may receive an
+      uninitialized pointer, causing undefined behavior, heap corruption, or a
+      crash.
+    metadata:
+      cwe:
+        - "CWE-824: Access of Uninitialized Pointer"
+        - "CWE-590: Free of Memory not on the Heap"
+      checker: "FUM.GEN.MIGHT"
+      bug_type: "deleting possibly unallocated or uninitialized memory"
+      category: security
+      technology:
+        - c
+        - cpp
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      precision: MEDIUM
+      description: >-
+        Detects local pointer variables that are declared without initialization,
+        conditionally assigned with new/new[], and then deleted outside the
+        conditional allocation path.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $TYPE *$PTR;
+              ...
+              if ($COND) {
+                ...
+                $PTR = $ALLOC;
+                ...
+              }
+              ...
+              delete $PTR;
+          - pattern: |
+              $TYPE *$PTR;
+              ...
+              if ($COND) {
+                ...
+                $PTR = $ALLOC;
+                ...
+              }
+              ...
+              delete[] $PTR;
+
+      - metavariable-pattern:
+          metavariable: $ALLOC
+          pattern-either:
+            - pattern: new $ALLOC_TYPE
+            - pattern: new $ALLOC_TYPE(...)
+            - pattern: new $ALLOC_TYPE[$SIZE]
+
+      # Safe: pointer is explicitly initialized before the conditional allocation.
+      - pattern-not: |
+          $TYPE *$PTR;
+          ...
+          $PTR = ...;
+          ...
+          if ($COND) {
+            ...
+            $PTR = $ALLOC;
+            ...
+          }
+          ...
+          delete $PTR;
+      - pattern-not: |
+          $TYPE *$PTR;
+          ...
+          $PTR = ...;
+          ...
+          if ($COND) {
+            ...
+            $PTR = $ALLOC;
+            ...
+          }
+          ...
+          delete[] $PTR;
+
+      # Safe: both branches assign the pointer.
+      - pattern-not: |
+          $TYPE *$PTR;
+          ...
+          if ($COND) {
+            ...
+            $PTR = ...;
+            ...
+          } else {
+            ...
+            $PTR = ...;
+            ...
+          }
+          ...
+          delete $PTR;
+      - pattern-not: |
+          $TYPE *$PTR;
+          ...
+          if ($COND) {
+            ...
+            $PTR = ...;
+            ...
+          } else {
+            ...
+            $PTR = ...;
+            ...
+          }
+          ...
+          delete[] $PTR;
+
+  - id: cpp.mismatched.malloc-delete
+    mode: taint
+    languages:
+      - cpp
+    severity: ERROR
+    message: Memory allocated with malloc/calloc/realloc must be released with free(), not delete/delete[].
+    pattern-sources:
+      - pattern-either:
+          - pattern: malloc(...)
+          - pattern: calloc(...)
+          - pattern: realloc(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: delete $PTR;
+              - pattern: delete[] $PTR;
+          - focus-metavariable: $PTR
+
+  - id: cpp.mismatched.new-array-delete
+    mode: taint
+    languages:
+      - cpp
+    severity: ERROR
+    message: Memory allocated with new[] must be released with delete[], not delete.
+    pattern-sources:
+      - pattern: new $TYPE[$SIZE]
+    pattern-sinks:
+      - patterns:
+          - pattern: delete $PTR;
+          - focus-metavariable: $PTR
+
+  - id: cpp.mismatched.new-delete-array
+    mode: taint
+    languages:
+      - cpp
+    severity: ERROR
+    message: Memory allocated with scalar new must be released with delete, not delete[].
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: new $TYPE
+              - pattern: new $TYPE(...)
+          - pattern-not: new $TYPE[$SIZE]
+    pattern-sinks:
+      - patterns:
+          - pattern: delete[] $PTR;
+          - focus-metavariable: $PTR
+
+  - id: cpp.mismatched.new-free
+    mode: taint
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: Memory allocated with new/new[] must be released with delete/delete[], not free() or realloc().
+    pattern-sources:
+      - pattern-either:
+          - pattern: new $TYPE
+          - pattern: new $TYPE(...)
+          - pattern: new $TYPE[$SIZE]
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: free($PTR)
+              - pattern: realloc($PTR, ...)
+          - focus-metavariable: $PTR
+
+  ###########################################################################
+  # Non-void function has a bare return.
+  ###########################################################################
+  - id: cxx.funcret.gen.non-void-function-bare-return
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Non-void function '$FUNC' uses 'return;' without returning a value. Return
+      an expression compatible with '$RET' or change the function return type to
+      void.
+    metadata:
+      cwe:
+        - "CWE-758: Reliance on Undefined, Unspecified, or Implementation-Defined Behavior"
+        - "CWE-457: Use of Uninitialized Variable"
+      bug_type: "bare return in non-void function"
+      checker: "FUNCRET.GEN"
+      confidence: HIGH
+      impact: "Caller may receive an indeterminate return value or compilation may fail."
+      likelihood: HIGH
+      precision: HIGH
+      category: correctness
+      subcategory:
+        - vuln
+        - audit
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $RET $FUNC(...) {
+                ...
+                return;
+                ...
+              }
+          - pattern: |
+              $RET $CLASS::$FUNC(...) {
+                ...
+                return;
+                ...
+              }
+          - pattern: |
+              $RET $FUNC(...) const {
+                ...
+                return;
+                ...
+              }
+          - pattern: |
+              $RET $CLASS::$FUNC(...) const {
+                ...
+                return;
+                ...
+              }
+          - pattern: |
+              auto $FUNC(...) -> $RET {
+                ...
+                return;
+                ...
+              }
+          - pattern: |
+              auto $CLASS::$FUNC(...) -> $RET {
+                ...
+                return;
+                ...
+              }
+          - pattern: |
+              auto $FUNC(...) const -> $RET {
+                ...
+                return;
+                ...
+              }
+          - pattern: |
+              auto $CLASS::$FUNC(...) const -> $RET {
+                ...
+                return;
+                ...
+              }
+
+      - metavariable-regex:
+          metavariable: $RET
+          regex: '^(?!(?:(?:static|inline|extern|constexpr|virtual|friend|const|volatile|register)\s+)*void\s*$)(?!auto\s*$).+'
+
+      - pattern-not: |
+          int main(...) {
+            ...
+          }
+      - pattern-not: |
+          auto main(...) -> int {
+            ...
+          }
+
+      - pattern-not: |
+          [[noreturn]] $RET $FUNC(...) {
+            ...
+          }
+      - pattern-not: |
+          [[noreturn]] $RET $CLASS::$FUNC(...) {
+            ...
+          }
+      - pattern-not: |
+          __attribute__((noreturn)) $RET $FUNC(...) {
+            ...
+          }
+      - pattern-not: |
+          __attribute__((noreturn)) $RET $CLASS::$FUNC(...) {
+            ...
+          }
+
+      - focus-metavariable: $FUNC
+
+  ###########################################################################
+  # Medium-confidence path-sensitive approximation.
+  ###########################################################################
+  - id: cxx.funcret.gen.non-void-function-conditional-return-missing-fallback
+    languages:
+      - c
+      - cpp
+    severity: WARNING
+    message: >-
+      Non-void function '$FUNC' has a conditional return but does not appear to
+      have an unconditional fallback return value. Verify that every control-flow
+      path returns a value compatible with '$RET'.
+    metadata:
+      cwe:
+        - "CWE-758: Reliance on Undefined, Unspecified, or Implementation-Defined Behavior"
+        - "CWE-457: Use of Uninitialized Variable"
+      bug_type: "possible missing return value on some paths"
+      checker: "FUNCRET.GEN"
+      confidence: MEDIUM
+      impact: "A fall-through path in a non-void function can produce an indeterminate return value."
+      likelihood: MEDIUM
+      precision: MEDIUM
+      category: correctness
+      subcategory:
+        - vuln
+        - audit
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $RET $FUNC(...) {
+                ...
+                if ($COND) {
+                  ...
+                  return $VALUE;
+                  ...
+                }
+                ...
+              }
+          - pattern: |
+              $RET $CLASS::$FUNC(...) {
+                ...
+                if ($COND) {
+                  ...
+                  return $VALUE;
+                  ...
+                }
+                ...
+              }
+          - pattern: |
+              $RET $FUNC(...) const {
+                ...
+                if ($COND) {
+                  ...
+                  return $VALUE;
+                  ...
+                }
+                ...
+              }
+          - pattern: |
+              $RET $CLASS::$FUNC(...) const {
+                ...
+                if ($COND) {
+                  ...
+                  return $VALUE;
+                  ...
+                }
+                ...
+              }
+          - pattern: |
+              auto $FUNC(...) -> $RET {
+                ...
+                if ($COND) {
+                  ...
+                  return $VALUE;
+                  ...
+                }
+                ...
+              }
+          - pattern: |
+              auto $CLASS::$FUNC(...) -> $RET {
+                ...
+                if ($COND) {
+                  ...
+                  return $VALUE;
+                  ...
+                }
+                ...
+              }
+
+      - metavariable-regex:
+          metavariable: $RET
+          regex: '^(?!(?:(?:static|inline|extern|constexpr|virtual|friend|const|volatile|register)\s+)*void\s*$)(?!auto\s*$).+'
+
+      - pattern-not: |
+          int main(...) {
+            ...
+          }
+      - pattern-not: |
+          auto main(...) -> int {
+            ...
+          }
+
+      - pattern-not: |
+          $RET $FUNC(...) {
+            ...
+            if ($COND) {
+              ...
+              return $VALUE;
+              ...
+            }
+            ...
+            return $FALLBACK;
+          }
+      - pattern-not: |
+          $RET $CLASS::$FUNC(...) {
+            ...
+            if ($COND) {
+              ...
+              return $VALUE;
+              ...
+            }
+            ...
+            return $FALLBACK;
+          }
+      - pattern-not: |
+          $RET $FUNC(...) const {
+            ...
+            if ($COND) {
+              ...
+              return $VALUE;
+              ...
+            }
+            ...
+            return $FALLBACK;
+          }
+      - pattern-not: |
+          $RET $CLASS::$FUNC(...) const {
+            ...
+            if ($COND) {
+              ...
+              return $VALUE;
+              ...
+            }
+            ...
+            return $FALLBACK;
+          }
+      - pattern-not: |
+          auto $FUNC(...) -> $RET {
+            ...
+            if ($COND) {
+              ...
+              return $VALUE;
+              ...
+            }
+            ...
+            return $FALLBACK;
+          }
+      - pattern-not: |
+          auto $CLASS::$FUNC(...) -> $RET {
+            ...
+            if ($COND) {
+              ...
+              return $VALUE;
+              ...
+            }
+            ...
+            return $FALLBACK;
+          }
+
+      - pattern-not: |
+          $RET $FUNC(...) {
+            ...
+            if ($COND) {
+              ...
+              return $A;
+              ...
+            } else {
+              ...
+              return $B;
+              ...
+            }
+            ...
+          }
+      - pattern-not: |
+          $RET $CLASS::$FUNC(...) {
+            ...
+            if ($COND) {
+              ...
+              return $A;
+              ...
+            } else {
+              ...
+              return $B;
+              ...
+            }
+            ...
+          }
+      - pattern-not: |
+          $RET $FUNC(...) const {
+            ...
+            if ($COND) {
+              ...
+              return $A;
+              ...
+            } else {
+              ...
+              return $B;
+              ...
+            }
+            ...
+          }
+      - pattern-not: |
+          $RET $CLASS::$FUNC(...) const {
+            ...
+            if ($COND) {
+              ...
+              return $A;
+              ...
+            } else {
+              ...
+              return $B;
+              ...
+            }
+            ...
+          }
+
+      - pattern-not: |
+          [[noreturn]] $RET $FUNC(...) {
+            ...
+          }
+      - pattern-not: |
+          [[noreturn]] $RET $CLASS::$FUNC(...) {
+            ...
+          }
+      - pattern-not: |
+          __attribute__((noreturn)) $RET $FUNC(...) {
+            ...
+          }
+      - pattern-not: |
+          __attribute__((noreturn)) $RET $CLASS::$FUNC(...) {
+            ...
+          }
+
+      - pattern-not: |
+          $RET $FUNC(...) {
+            throw $EXCEPTION;
+          }
+      - pattern-not: |
+          $RET $FUNC(...) {
+            abort();
+          }
+      - pattern-not: |
+          $RET $FUNC(...) {
+            std::abort();
+          }
+      - pattern-not: |
+          $RET $FUNC(...) {
+            exit(...);
+          }
+      - pattern-not: |
+          $RET $FUNC(...) {
+            std::exit(...);
+          }
+      - pattern-not: |
+          $RET $FUNC(...) {
+            _Exit(...);
+          }
+      - pattern-not: |
+          $RET $FUNC(...) {
+            __builtin_unreachable();
+          }
+
+      - focus-metavariable: $FUNC
+
+  ###########################################################################
+  # FUNCRET.GEN
+  # Non-void function does not return a value.
+  ###########################################################################
+  - id: cxx.funcret.gen.non-void-function-no-return
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Non-void function '$FUNC' has no return statement. Falling off the end of
+      a non-void function can leave the returned value indeterminate and causes
+      undefined behavior. Return a value on all paths or change the function
+      return type to void.
+    metadata:
+      cwe:
+        - "CWE-758: Reliance on Undefined, Unspecified, or Implementation-Defined Behavior"
+        - "CWE-457: Use of Uninitialized Variable"
+      bug_type: "missing return value in non-void function"
+      checker: "FUNCRET.GEN"
+      confidence: HIGH
+      impact: "Caller may receive an indeterminate return value; program behavior is undefined."
+      likelihood: HIGH
+      precision: HIGH
+      category: correctness
+      subcategory:
+        - vuln
+        - audit
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $RET $FUNC(...) {
+                ...
+              }
+          - pattern: |
+              $RET $CLASS::$FUNC(...) {
+                ...
+              }
+          - pattern: |
+              $RET $FUNC(...) const {
+                ...
+              }
+          - pattern: |
+              $RET $CLASS::$FUNC(...) const {
+                ...
+              }
+          - pattern: |
+              auto $FUNC(...) -> $RET {
+                ...
+              }
+          - pattern: |
+              auto $CLASS::$FUNC(...) -> $RET {
+                ...
+              }
+          - pattern: |
+              auto $FUNC(...) const -> $RET {
+                ...
+              }
+          - pattern: |
+              auto $CLASS::$FUNC(...) const -> $RET {
+                ...
+              }
+
+      - metavariable-regex:
+          metavariable: $RET
+          regex: '^(?!(?:(?:static|inline|extern|constexpr|virtual|friend|const|volatile|register)\s+)*void\s*$)(?!auto\s*$).+'
+
+      - pattern-not: |
+          int main(...) {
+            ...
+          }
+      - pattern-not: |
+          auto main(...) -> int {
+            ...
+          }
+
+      - pattern-not: |
+          $RET $FUNC(...) {
+            ...
+            return ...;
+            ...
+          }
+      - pattern-not: |
+          $RET $CLASS::$FUNC(...) {
+            ...
+            return ...;
+            ...
+          }
+      - pattern-not: |
+          $RET $FUNC(...) const {
+            ...
+            return ...;
+            ...
+          }
+      - pattern-not: |
+          $RET $CLASS::$FUNC(...) const {
+            ...
+            return ...;
+            ...
+          }
+      - pattern-not: |
+          auto $FUNC(...) -> $RET {
+            ...
+            return ...;
+            ...
+          }
+      - pattern-not: |
+          auto $CLASS::$FUNC(...) -> $RET {
+            ...
+            return ...;
+            ...
+          }
+      - pattern-not: |
+          auto $FUNC(...) const -> $RET {
+            ...
+            return ...;
+            ...
+          }
+      - pattern-not: |
+          auto $CLASS::$FUNC(...) const -> $RET {
+            ...
+            return ...;
+            ...
+          }
+
+      - pattern-not: |
+          [[noreturn]] $RET $FUNC(...) {
+            ...
+          }
+      - pattern-not: |
+          [[noreturn]] $RET $CLASS::$FUNC(...) {
+            ...
+          }
+      - pattern-not: |
+          __attribute__((noreturn)) $RET $FUNC(...) {
+            ...
+          }
+      - pattern-not: |
+          __attribute__((noreturn)) $RET $CLASS::$FUNC(...) {
+            ...
+          }
+
+      - pattern-not: |
+          $RET $FUNC(...) {
+            throw $EXCEPTION;
+          }
+      - pattern-not: |
+          $RET $FUNC(...) {
+            abort();
+          }
+      - pattern-not: |
+          $RET $FUNC(...) {
+            std::abort();
+          }
+      - pattern-not: |
+          $RET $FUNC(...) {
+            exit(...);
+          }
+      - pattern-not: |
+          $RET $FUNC(...) {
+            std::exit(...);
+          }
+      - pattern-not: |
+          $RET $FUNC(...) {
+            _Exit(...);
+          }
+      - pattern-not: |
+          $RET $FUNC(...) {
+            __builtin_unreachable();
+          }
+
+      - focus-metavariable: $FUNC
+
+  ###########################################################################
+  # LOCRET.ARG - address of local written through pointer argument.
+  ###########################################################################
+  - id: cxx.locret.arg.address-of-local-written-through-pointer-argument
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Function writes the address of local stack variable '$LOCAL' through output
+      argument '$OUT'. The caller may retain a dangling pointer after this
+      function returns. Do not expose addresses of stack variables; use
+      caller-provided storage, heap allocation with clear ownership, static
+      storage only when appropriate, or return by value.
+    metadata:
+      cwe:
+        - "CWE-562: Return of Stack Variable Address"
+      checker: "LOCRET.ARG"
+      bug_type: "address of local variable escapes through function argument"
+      confidence: HIGH
+      precision: HIGH
+      likelihood: HIGH
+      impact: "Use-after-return / dangling pointer; may cause crashes, memory corruption, or undefined behavior."
+      category: security
+      subcategory:
+        - vuln
+        - correctness
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $RET $FUNC(..., $P **$OUT, ...) {
+                ...
+                $T $LOCAL;
+                ...
+              }
+          - pattern-inside: |
+              $RET $FUNC(..., $P **$OUT, ...) {
+                ...
+                $T $LOCAL = $INIT;
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $P **$OUT, ...) {
+                ...
+                $T $LOCAL;
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $P **$OUT, ...) {
+                ...
+                $T $LOCAL = $INIT;
+                ...
+              }
+          - pattern-inside: |
+              $RET $FUNC(..., $P **$OUT, ...) const {
+                ...
+                $T $LOCAL;
+                ...
+              }
+          - pattern-inside: |
+              $RET $FUNC(..., $P **$OUT, ...) const {
+                ...
+                $T $LOCAL = $INIT;
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $P **$OUT, ...) const {
+                ...
+                $T $LOCAL;
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $P **$OUT, ...) const {
+                ...
+                $T $LOCAL = $INIT;
+                ...
+              }
+
+      - pattern: |
+          $OUT_LHS = &$LOCAL;
+
+      - metavariable-pattern:
+          metavariable: $OUT_LHS
+          pattern-either:
+            - pattern: "*$OUT"
+            - pattern: $OUT[$IDX]
+
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            static $T $LOCAL;
+            ...
+          }
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            static $T $LOCAL = $INIT;
+            ...
+          }
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            thread_local $T $LOCAL;
+            ...
+          }
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            thread_local $T $LOCAL = $INIT;
+            ...
+          }
+
+      - focus-metavariable: $LOCAL
+
+  ###########################################################################
+  # LOCRET.ARG - address of local written through struct/reference argument.
+  ###########################################################################
+  - id: cxx.locret.arg.address-of-local-written-through-struct-pointer-argument
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Function stores the address of local stack variable '$LOCAL' into field
+      '$FIELD' of argument '$ARG'. This exposes a stack address to the caller and
+      creates a dangling pointer after the function returns.
+    metadata:
+      cwe:
+        - "CWE-562: Return of Stack Variable Address"
+      checker: "LOCRET.ARG"
+      bug_type: "address of local variable escapes through field of argument"
+      confidence: HIGH
+      precision: HIGH
+      likelihood: HIGH
+      impact: "Use-after-return / dangling pointer; may cause crashes, memory corruption, or undefined behavior."
+      category: security
+      subcategory:
+        - vuln
+        - correctness
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $RET $FUNC(..., $ARG_T *$ARG, ...) {
+                ...
+                $T $LOCAL;
+                ...
+              }
+          - pattern-inside: |
+              $RET $FUNC(..., $ARG_T *$ARG, ...) {
+                ...
+                $T $LOCAL = $INIT;
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $ARG_T *$ARG, ...) {
+                ...
+                $T $LOCAL;
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $ARG_T *$ARG, ...) {
+                ...
+                $T $LOCAL = $INIT;
+                ...
+              }
+          - pattern-inside: |
+              $RET $FUNC(..., $ARG_T *$ARG, ...) const {
+                ...
+                $T $LOCAL;
+                ...
+              }
+          - pattern-inside: |
+              $RET $FUNC(..., $ARG_T *$ARG, ...) const {
+                ...
+                $T $LOCAL = $INIT;
+                ...
+              }
+          - pattern-inside: |
+              $RET $FUNC(..., $ARG_T &$ARG, ...) {
+                ...
+                $T $LOCAL;
+                ...
+              }
+          - pattern-inside: |
+              $RET $FUNC(..., $ARG_T &$ARG, ...) {
+                ...
+                $T $LOCAL = $INIT;
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $ARG_T &$ARG, ...) {
+                ...
+                $T $LOCAL;
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $ARG_T &$ARG, ...) {
+                ...
+                $T $LOCAL = $INIT;
+                ...
+              }
+
+      - pattern: |
+          $FIELD_LHS = &$LOCAL;
+
+      - metavariable-pattern:
+          metavariable: $FIELD_LHS
+          pattern-either:
+            - pattern: $ARG->$FIELD
+            - pattern: $ARG.$FIELD
+
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            static $T $LOCAL;
+            ...
+          }
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            static $T $LOCAL = $INIT;
+            ...
+          }
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            thread_local $T $LOCAL;
+            ...
+          }
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            thread_local $T $LOCAL = $INIT;
+            ...
+          }
+
+      - focus-metavariable: $LOCAL
+
+  ###########################################################################
+  # LOCRET.ARG - local array written through pointer argument.
+  ###########################################################################
+  - id: cxx.locret.arg.local-array-written-through-pointer-argument
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Function writes local stack array '$LOCAL' through output argument '$OUT'.
+      The array decays to a pointer to stack memory, so the caller may retain a
+      dangling pointer after this function returns. Do not expose stack buffer
+      addresses through arguments.
+    metadata:
+      cwe:
+        - "CWE-562: Return of Stack Variable Address"
+      checker: "LOCRET.ARG"
+      bug_type: "local stack array escapes through function argument"
+      confidence: HIGH
+      precision: HIGH
+      likelihood: HIGH
+      impact: "Use-after-return / dangling pointer; may cause crashes, memory corruption, or undefined behavior."
+      category: security
+      subcategory:
+        - vuln
+        - correctness
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $RET $FUNC(..., $P **$OUT, ...) {
+                ...
+                $T $LOCAL[$SIZE];
+                ...
+              }
+          - pattern-inside: |
+              $RET $FUNC(..., $P **$OUT, ...) {
+                ...
+                $T $LOCAL[$SIZE] = { ... };
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $P **$OUT, ...) {
+                ...
+                $T $LOCAL[$SIZE];
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $P **$OUT, ...) {
+                ...
+                $T $LOCAL[$SIZE] = { ... };
+                ...
+              }
+          - pattern-inside: |
+              $RET $FUNC(..., $P **$OUT, ...) const {
+                ...
+                $T $LOCAL[$SIZE];
+                ...
+              }
+          - pattern-inside: |
+              $RET $FUNC(..., $P **$OUT, ...) const {
+                ...
+                $T $LOCAL[$SIZE] = { ... };
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $P **$OUT, ...) const {
+                ...
+                $T $LOCAL[$SIZE];
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $P **$OUT, ...) const {
+                ...
+                $T $LOCAL[$SIZE] = { ... };
+                ...
+              }
+
+      - pattern: |
+          $OUT_LHS = $RHS;
+
+      - metavariable-pattern:
+          metavariable: $OUT_LHS
+          pattern-either:
+            - pattern: "*$OUT"
+            - pattern: $OUT[$IDX]
+
+      - metavariable-pattern:
+          metavariable: $RHS
+          pattern-either:
+            - pattern: $LOCAL
+            - pattern: '&$LOCAL[$IDX]'
+
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            static $T $LOCAL[$SIZE];
+            ...
+          }
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            static $T $LOCAL[$SIZE] = { ... };
+            ...
+          }
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            thread_local $T $LOCAL[$SIZE];
+            ...
+          }
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            thread_local $T $LOCAL[$SIZE] = { ... };
+            ...
+          }
+
+      - focus-metavariable: $LOCAL
+
+  ###########################################################################
+  # LOCRET.ARG - local array written through struct/reference argument.
+  ###########################################################################
+  - id: cxx.locret.arg.local-array-written-through-struct-pointer-argument
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Function stores local stack array '$LOCAL' into field '$FIELD' of argument
+      '$ARG'. The array decays to a pointer to stack memory, creating a dangling
+      pointer after this function returns.
+    metadata:
+      cwe:
+        - "CWE-562: Return of Stack Variable Address"
+      checker: "LOCRET.ARG"
+      bug_type: "local stack array escapes through field of argument"
+      confidence: HIGH
+      precision: HIGH
+      likelihood: HIGH
+      impact: "Use-after-return / dangling pointer; may cause crashes, memory corruption, or undefined behavior."
+      category: security
+      subcategory:
+        - vuln
+        - correctness
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $RET $FUNC(..., $ARG_T *$ARG, ...) {
+                ...
+                $T $LOCAL[$SIZE];
+                ...
+              }
+          - pattern-inside: |
+              $RET $FUNC(..., $ARG_T *$ARG, ...) {
+                ...
+                $T $LOCAL[$SIZE] = { ... };
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $ARG_T *$ARG, ...) {
+                ...
+                $T $LOCAL[$SIZE];
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $ARG_T *$ARG, ...) {
+                ...
+                $T $LOCAL[$SIZE] = { ... };
+                ...
+              }
+          - pattern-inside: |
+              $RET $FUNC(..., $ARG_T &$ARG, ...) {
+                ...
+                $T $LOCAL[$SIZE];
+                ...
+              }
+          - pattern-inside: |
+              $RET $FUNC(..., $ARG_T &$ARG, ...) {
+                ...
+                $T $LOCAL[$SIZE] = { ... };
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $ARG_T &$ARG, ...) {
+                ...
+                $T $LOCAL[$SIZE];
+                ...
+              }
+          - pattern-inside: |
+              $RET $CLASS::$FUNC(..., $ARG_T &$ARG, ...) {
+                ...
+                $T $LOCAL[$SIZE] = { ... };
+                ...
+              }
+
+      - pattern: |
+          $FIELD_LHS = $RHS;
+
+      - metavariable-pattern:
+          metavariable: $FIELD_LHS
+          pattern-either:
+            - pattern: $ARG->$FIELD
+            - pattern: $ARG.$FIELD
+
+      - metavariable-pattern:
+          metavariable: $RHS
+          pattern-either:
+            - pattern: $LOCAL
+            - pattern: '&$LOCAL[$IDX]'
+
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            static $T $LOCAL[$SIZE];
+            ...
+          }
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            static $T $LOCAL[$SIZE] = { ... };
+            ...
+          }
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            thread_local $T $LOCAL[$SIZE];
+            ...
+          }
+      - pattern-not-inside: |
+          $RET $FUNC(...) {
+            ...
+            thread_local $T $LOCAL[$SIZE] = { ... };
+            ...
+          }
+
+      - focus-metavariable: $LOCAL
+
+  ###########################################################################
+  # LOCRET.RET - local address returned (taint).
+  ###########################################################################
+  - id: cxx.locret.ret.local-address-returned
+    languages:
+      - c
+      - cpp
+    mode: taint
+    severity: ERROR
+    message: >-
+      Function returns an address derived from local stack storage '$LOCAL'.
+      The returned pointer becomes dangling after the function returns. Do not
+      return addresses of local variables; return by value, use caller-provided
+      storage, or allocate with clear ownership.
+    metadata:
+      cwe:
+        - "CWE-562: Return of Stack Variable Address"
+      checker: "LOCRET.RET"
+      bug_type: "local stack address escapes through return expression"
+      confidence: HIGH
+      precision: HIGH
+      likelihood: HIGH
+      impact: "Use-after-return / dangling pointer; may cause crashes, memory corruption, or undefined behavior."
+      category: security
+      subcategory:
+        - vuln
+        - correctness
+      technology:
+        - c
+        - cpp
+    pattern-sources:
+      # Address of ordinary local variable.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RT *$FUNC(...) {
+                    ...
+                    $T $LOCAL;
+                    ...
+                  }
+              - pattern-inside: |
+                  $RT *$FUNC(...) {
+                    ...
+                    $T $LOCAL = $INIT;
+                    ...
+                  }
+              - pattern-inside: |
+                  $RT *$CLASS::$FUNC(...) {
+                    ...
+                    $T $LOCAL;
+                    ...
+                  }
+              - pattern-inside: |
+                  $RT *$CLASS::$FUNC(...) {
+                    ...
+                    $T $LOCAL = $INIT;
+                    ...
+                  }
+              - pattern-inside: |
+                  $RT *$FUNC(...) const {
+                    ...
+                    $T $LOCAL;
+                    ...
+                  }
+              - pattern-inside: |
+                  $RT *$FUNC(...) const {
+                    ...
+                    $T $LOCAL = $INIT;
+                    ...
+                  }
+              - pattern-inside: |
+                  auto $FUNC(...) -> $RT * {
+                    ...
+                    $T $LOCAL;
+                    ...
+                  }
+              - pattern-inside: |
+                  auto $FUNC(...) -> $RT * {
+                    ...
+                    $T $LOCAL = $INIT;
+                    ...
+                  }
+          - pattern: '&$LOCAL'
+          - pattern-not-inside: |
+              $RT *$FUNC(...) {
+                ...
+                static $T $LOCAL;
+                ...
+              }
+          - pattern-not-inside: |
+              $RT *$FUNC(...) {
+                ...
+                static $T $LOCAL = $INIT;
+                ...
+              }
+          - pattern-not-inside: |
+              $RT *$FUNC(...) {
+                ...
+                thread_local $T $LOCAL;
+                ...
+              }
+          - pattern-not-inside: |
+              $RT *$FUNC(...) {
+                ...
+                thread_local $T $LOCAL = $INIT;
+                ...
+              }
+
+      # Address of a function parameter.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RT *$FUNC(..., $T $LOCAL, ...) {
+                    ...
+                  }
+              - pattern-inside: |
+                  $RT *$CLASS::$FUNC(..., $T $LOCAL, ...) {
+                    ...
+                  }
+              - pattern-inside: |
+                  $RT *$FUNC(..., $T $LOCAL, ...) const {
+                    ...
+                  }
+              - pattern-inside: |
+                  auto $FUNC(..., $T $LOCAL, ...) -> $RT * {
+                    ...
+                  }
+          - pattern: '&$LOCAL'
+
+      # Address of a field belonging to a local stack object.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RT *$FUNC(...) {
+                    ...
+                    $T $LOCAL;
+                    ...
+                  }
+              - pattern-inside: |
+                  $RT *$FUNC(...) {
+                    ...
+                    $T $LOCAL = $INIT;
+                    ...
+                  }
+              - pattern-inside: |
+                  $RT *$CLASS::$FUNC(...) {
+                    ...
+                    $T $LOCAL;
+                    ...
+                  }
+              - pattern-inside: |
+                  auto $FUNC(...) -> $RT * {
+                    ...
+                    $T $LOCAL;
+                    ...
+                  }
+          - pattern: '&$LOCAL.$FIELD'
+          - pattern-not-inside: |
+              $RT *$FUNC(...) {
+                ...
+                static $T $LOCAL;
+                ...
+              }
+          - pattern-not-inside: |
+              $RT *$FUNC(...) {
+                ...
+                static $T $LOCAL = $INIT;
+                ...
+              }
+    pattern-sinks:
+      - pattern: |
+          return $RETVAL;
+
+  ###########################################################################
+  # LOCRET.RET - local address returned through global intermediate.
+  ###########################################################################
+  - id: cxx.locret.ret.local-address-returned-through-global-intermediate
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Function stores the address of local stack variable '$LOCAL' into global
+      pointer '$GLOB' and then returns '$GLOB'. The returned pointer will be
+      dangling after the function returns.
+    metadata:
+      cwe:
+        - "CWE-562: Return of Stack Variable Address"
+      checker: "LOCRET.RET"
+      bug_type: "local stack address returned through global intermediate"
+      confidence: HIGH
+      precision: HIGH
+      category: security
+      subcategory:
+        - vuln
+        - correctness
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $GT *$GLOB;
+              ...
+              $RT *$FUNC(...) {
+                ...
+                $T $LOCAL;
+                ...
+              }
+          - pattern-inside: |
+              $GT *$GLOB;
+              ...
+              $RT *$FUNC(...) {
+                ...
+                $T $LOCAL = $INIT;
+                ...
+              }
+          - pattern-inside: |
+              extern $GT *$GLOB;
+              ...
+              $RT *$FUNC(...) {
+                ...
+                $T $LOCAL;
+                ...
+              }
+          - pattern-inside: |
+              static $GT *$GLOB;
+              ...
+              $RT *$FUNC(...) {
+                ...
+                $T $LOCAL;
+                ...
+              }
+
+      - pattern-either:
+          - pattern: |
+              $GLOB = &$LOCAL;
+              ...
+              return $GLOB;
+          - pattern: |
+              $GLOB = $COND ? &$LOCAL : $OTHER;
+              ...
+              return $GLOB;
+          - pattern: |
+              $GLOB = $COND ? $OTHER : &$LOCAL;
+              ...
+              return $GLOB;
+
+      - pattern-not-inside: |
+          $RT *$FUNC(..., $PT $GLOB, ...) {
+            ...
+            $GLOB = &$LOCAL;
+            ...
+            return $GLOB;
+            ...
+          }
+      - pattern-not-inside: |
+          $RT *$FUNC(...) {
+            ...
+            $SHADOW_T $GLOB;
+            ...
+            $GLOB = &$LOCAL;
+            ...
+            return $GLOB;
+            ...
+          }
+      - pattern-not-inside: |
+          $RT *$FUNC(...) {
+            ...
+            static $T $LOCAL;
+            ...
+          }
+
+      - focus-metavariable: $LOCAL
+
+  ###########################################################################
+  # LOCRET.RET - local address returned through local struct/union field.
+  ###########################################################################
+  - id: cxx.locret.ret.local-address-returned-through-local-field
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Function returns field '$FIELD' of local object '$HOLDER' after storing
+      the address of local stack variable '$LOCAL' into it. The returned pointer
+      will be dangling after the function returns.
+    metadata:
+      cwe:
+        - "CWE-562: Return of Stack Variable Address"
+      checker: "LOCRET.RET"
+      bug_type: "local stack address returned through local struct or union field"
+      confidence: HIGH
+      precision: HIGH
+      category: security
+      subcategory:
+        - vuln
+        - correctness
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $RT *$FUNC(...) {
+                ...
+                $T $LOCAL;
+                ...
+                $HT $HOLDER;
+                ...
+              }
+          - pattern-inside: |
+              $RT *$FUNC(...) {
+                ...
+                $T $LOCAL = $INIT;
+                ...
+                $HT $HOLDER;
+                ...
+              }
+          - pattern-inside: |
+              $RT *$FUNC(...) {
+                ...
+                $T $LOCAL;
+                ...
+                $HT $HOLDER = $HINIT;
+                ...
+              }
+          - pattern-inside: |
+              $RT *$CLASS::$FUNC(...) {
+                ...
+                $T $LOCAL;
+                ...
+                $HT $HOLDER;
+                ...
+              }
+      - pattern-either:
+          - pattern: |
+              $HOLDER.$FIELD = &$LOCAL;
+              ...
+              return $HOLDER.$FIELD;
+          - pattern: |
+              $HOLDER.$FIELD = &$LOCAL;
+              ...
+              return ($CAST *)$HOLDER.$FIELD;
+      - pattern-not-inside: |
+          $RT *$FUNC(...) {
+            ...
+            static $T $LOCAL;
+            ...
+          }
+      - focus-metavariable: $LOCAL
+
+  ###########################################################################
+  # LOCRET.RET - local address returned through local pointer array.
+  ###########################################################################
+  - id: cxx.locret.ret.local-address-returned-through-local-pointer-array
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Function returns an element of local pointer array '$ARR' after storing
+      the address of local stack variable '$LOCAL' into it. The returned pointer
+      will be dangling after the function returns.
+    metadata:
+      cwe:
+        - "CWE-562: Return of Stack Variable Address"
+      checker: "LOCRET.RET"
+      bug_type: "local stack address returned through local pointer array"
+      confidence: HIGH
+      precision: HIGH
+      category: security
+      subcategory:
+        - vuln
+        - correctness
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $RT *$FUNC(...) {
+                ...
+                $T $LOCAL;
+                ...
+                $PT *$ARR[$SIZE];
+                ...
+              }
+          - pattern-inside: |
+              $RT *$FUNC(...) {
+                ...
+                $T $LOCAL = $INIT;
+                ...
+                $PT *$ARR[$SIZE];
+                ...
+              }
+
+      - pattern-either:
+          - pattern: |
+              $ARR[$IDX] = &$LOCAL;
+              ...
+              return $ARR[$IDX];
+          - pattern: |
+              $ARR[$IDX1] = &$LOCAL;
+              ...
+              return $ARR[$IDX2];
+
+      - pattern-not-inside: |
+          $RT *$FUNC(...) {
+            ...
+            static $T $LOCAL;
+            ...
+          }
+
+      - focus-metavariable: $LOCAL
+
+  ###########################################################################
+  # LOCRET.RET - local address returned through pointer-to-pointer.
+  ###########################################################################
+  - id: cxx.locret.ret.local-address-returned-through-pointer-to-pointer
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Function returns through pointer-to-pointer '$PP', which resolves to alias
+      '$P' pointing at local stack variable '$LOCAL'. The returned pointer will
+      be dangling after the function returns.
+    metadata:
+      cwe:
+        - "CWE-562: Return of Stack Variable Address"
+      checker: "LOCRET.RET"
+      bug_type: "local stack address returned through pointer-to-pointer"
+      confidence: HIGH
+      precision: HIGH
+      category: security
+      subcategory:
+        - vuln
+        - correctness
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $RT *$FUNC(...) {
+                ...
+                $T $LOCAL;
+                ...
+              }
+          - pattern-inside: |
+              $RT *$FUNC(...) {
+                ...
+                $T $LOCAL = $INIT;
+                ...
+              }
+          - pattern-inside: |
+              $RT *$CLASS::$FUNC(...) {
+                ...
+                $T $LOCAL;
+                ...
+              }
+      - pattern-either:
+          - pattern: |
+              $PT *$P = &$LOCAL;
+              ...
+              $PPT **$PP = &$P;
+              ...
+              return *$PP;
+          - pattern: |
+              $PT *$P;
+              ...
+              $P = &$LOCAL;
+              ...
+              $PPT **$PP = &$P;
+              ...
+              return *$PP;
+      - pattern-not-inside: |
+          $RT *$FUNC(...) {
+            ...
+            static $T $LOCAL;
+            ...
+          }
+      - focus-metavariable: $LOCAL
+
+  ###########################################################################
+  # LOCRET.RET - local stack array returned (taint).
+  ###########################################################################
+  - id: cxx.locret.ret.local-array-returned
+    languages:
+      - c
+      - cpp
+    mode: taint
+    severity: ERROR
+    message: >-
+      Function returns a pointer derived from local stack array '$LOCAL'. The
+      array storage is invalid after the function returns, so the returned
+      pointer will be dangling.
+    metadata:
+      cwe:
+        - "CWE-562: Return of Stack Variable Address"
+      checker: "LOCRET.RET"
+      bug_type: "local stack array escapes through return expression"
+      confidence: HIGH
+      precision: HIGH
+      likelihood: HIGH
+      impact: "Use-after-return / dangling pointer; may cause crashes, memory corruption, or undefined behavior."
+      category: security
+      subcategory:
+        - vuln
+        - correctness
+      technology:
+        - c
+        - cpp
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $RT *$FUNC(...) {
+                    ...
+                    $T $LOCAL[$SIZE];
+                    ...
+                  }
+              - pattern-inside: |
+                  $RT *$FUNC(...) {
+                    ...
+                    $T $LOCAL[$SIZE] = { ... };
+                    ...
+                  }
+              - pattern-inside: |
+                  $RT *$CLASS::$FUNC(...) {
+                    ...
+                    $T $LOCAL[$SIZE];
+                    ...
+                  }
+              - pattern-inside: |
+                  $RT *$CLASS::$FUNC(...) {
+                    ...
+                    $T $LOCAL[$SIZE] = { ... };
+                    ...
+                  }
+              - pattern-inside: |
+                  auto $FUNC(...) -> $RT * {
+                    ...
+                    $T $LOCAL[$SIZE];
+                    ...
+                  }
+              - pattern-inside: |
+                  auto $FUNC(...) -> $RT * {
+                    ...
+                    $T $LOCAL[$SIZE] = { ... };
+                    ...
+                  }
+          - pattern-either:
+              - pattern: $LOCAL
+              - pattern: '&$LOCAL[$IDX]'
+              - pattern: $LOCAL + $OFF
+              - pattern: $OFF + $LOCAL
+          - pattern-not-inside: |
+              $RT *$FUNC(...) {
+                ...
+                static $T $LOCAL[$SIZE];
+                ...
+              }
+          - pattern-not-inside: |
+              $RT *$FUNC(...) {
+                ...
+                static $T $LOCAL[$SIZE] = { ... };
+                ...
+              }
+          - pattern-not-inside: |
+              $RT *$FUNC(...) {
+                ...
+                thread_local $T $LOCAL[$SIZE];
+                ...
+              }
+          - pattern-not-inside: |
+              $RT *$FUNC(...) {
+                ...
+                thread_local $T $LOCAL[$SIZE] = { ... };
+                ...
+              }
+    pattern-sinks:
+      - pattern: |
+          return $RETVAL;
+
+  ###########################################################################
+  # LOCRET.RET - local variable returned through macro-like expression.
+  ###########################################################################
+  - id: cxx.locret.ret.local-variable-returned-through-macro-like-expression
+    languages:
+      - c
+      - cpp
+    severity: WARNING
+    message: >-
+      Function returns macro-like expression '$MACRO($LOCAL)' involving local
+      stack variable '$LOCAL'. If the macro expands to the address of the local
+      variable, the returned pointer will be dangling.
+    metadata:
+      cwe:
+        - "CWE-562: Return of Stack Variable Address"
+      checker: "LOCRET.RET"
+      bug_type: "possible local stack address returned through macro-like expression"
+      confidence: LOW
+      precision: MEDIUM
+      category: security
+      subcategory:
+        - audit
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $RT *$FUNC(...) {
+                ...
+                $T $LOCAL;
+                ...
+              }
+          - pattern-inside: |
+              $RT *$FUNC(...) {
+                ...
+                $T $LOCAL = $INIT;
+                ...
+              }
+
+      - pattern: |
+          return $MACRO($LOCAL);
+
+      - pattern-not: |
+          return sizeof($LOCAL);
+
+      - pattern-not-inside: |
+          $RT *$FUNC(...) {
+            ...
+            static $T $LOCAL;
+            ...
+          }
+
+      - focus-metavariable: $LOCAL
+
+  ###########################################################################
+  # RABV.CHECK allow-style variant.
+  ###########################################################################
+  - id: cxx.rabv.check.array-access-before-allow-bounds-check
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      RABV.CHECK: Array '$ARR' is accessed with index '$IDX' before a later
+      allow-style bounds check. Move the bounds check before '$ARR[$IDX]'.
+    metadata:
+      checker: RABV.CHECK
+      category: security
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      bug_type: array access before bounds check
+      cwe:
+        - "CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer"
+        - "CWE-125: Out-of-bounds Read"
+        - "CWE-787: Out-of-bounds Write"
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $DST = $ARR[$IDX];
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $TYPE $DST = $ARR[$IDX];
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $ARR[$IDX] = $VAL;
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $FUNC(..., $ARR[$IDX], ...);
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $FUNC(..., &$ARR[$IDX], ...);
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              return $ARR[$IDX];
+              ...
+              if ($COND) {
+                ...
+              }
+
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            - pattern: $IDX < $UB
+            - pattern: $IDX <= $UB
+            - pattern: $UB > $IDX
+            - pattern: $UB >= $IDX
+            - pattern: $IDX >= $LB
+            - pattern: $IDX > $LB
+            - pattern: $LB <= $IDX
+            - pattern: $LB < $IDX
+            - pattern: $IDX >= $LB && $IDX < $UB
+            - pattern: $IDX < $UB && $IDX >= $LB
+            - pattern: $LB <= $IDX && $IDX < $UB
+            - pattern: $IDX < $UB && $LB <= $IDX
+            - pattern: $IDX > $LB && $IDX < $UB
+            - pattern: $IDX < $UB && $IDX > $LB
+            - pattern: $LB < $IDX && $IDX < $UB
+            - pattern: $IDX < $UB && $LB < $IDX
+
+      - pattern-not-inside: |
+          if ($IDX >= $UB) return $VAL;
+          ...
+          $ARR[$IDX]
+      - pattern-not-inside: |
+          if ($IDX >= $UB) goto $LABEL;
+          ...
+          $ARR[$IDX]
+      - pattern-not-inside: |
+          if ($IDX < $LB) return $VAL;
+          ...
+          $ARR[$IDX]
+      - pattern-not-inside: |
+          if ($IDX < $LB) goto $LABEL;
+          ...
+          $ARR[$IDX]
+      - pattern-not-inside: |
+          if ($IDX < $LB || $IDX >= $UB) return $VAL;
+          ...
+          $ARR[$IDX]
+      - pattern-not-inside: |
+          if ($IDX < $LB || $IDX >= $UB) goto $LABEL;
+          ...
+          $ARR[$IDX]
+      - pattern-not-inside: |
+          if ($IDX < $UB) {
+            ...
+            $ARR[$IDX]
+            ...
+          }
+      - pattern-not-inside: |
+          if ($IDX >= $LB && $IDX < $UB) {
+            ...
+            $ARR[$IDX]
+            ...
+          }
+
+      - focus-metavariable: $IDX
+
+  ###########################################################################
+  # RABV.CHECK reject-style variant.
+  ###########################################################################
+  - id: cxx.rabv.check.array-access-before-reject-bounds-check
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      RABV.CHECK: Array '$ARR' is accessed with index '$IDX' before a later
+      bounds/reject check. The index must be validated before using '$ARR[$IDX]'.
+    metadata:
+      checker: RABV.CHECK
+      category: security
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      bug_type: array access before bounds check
+      cwe:
+        - "CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer"
+        - "CWE-125: Out-of-bounds Read"
+        - "CWE-787: Out-of-bounds Write"
+      technology:
+        - c
+        - cpp
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $DST = $ARR[$IDX];
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $TYPE $DST = $ARR[$IDX];
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $ARR[$IDX] = $VAL;
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $ARR[$IDX] += $VAL;
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $ARR[$IDX] -= $VAL;
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $ARR[$IDX] |= $VAL;
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $ARR[$IDX] &= $VAL;
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $ARR[$IDX]++;
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              ++$ARR[$IDX];
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $ARR[$IDX]--;
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              --$ARR[$IDX];
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $FUNC(..., $ARR[$IDX], ...);
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              $FUNC(..., &$ARR[$IDX], ...);
+              ...
+              if ($COND) {
+                ...
+              }
+          - pattern: |
+              return $ARR[$IDX];
+              ...
+              if ($COND) {
+                ...
+              }
+
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            - pattern: $IDX >= $UB
+            - pattern: $IDX > $UB
+            - pattern: $UB <= $IDX
+            - pattern: $UB < $IDX
+            - pattern: $IDX < $LB
+            - pattern: $IDX <= $LB
+            - pattern: $LB > $IDX
+            - pattern: $LB >= $IDX
+            - pattern: $IDX < $LB || $IDX >= $UB
+            - pattern: $IDX >= $UB || $IDX < $LB
+            - pattern: $IDX < $LB || $UB <= $IDX
+            - pattern: $UB <= $IDX || $IDX < $LB
+            - pattern: $LB > $IDX || $IDX >= $UB
+            - pattern: $IDX >= $UB || $LB > $IDX
+            - pattern: $LB > $IDX || $UB <= $IDX
+            - pattern: $UB <= $IDX || $LB > $IDX
+
+      - pattern-not-inside: |
+          if ($IDX >= $UB) return $VAL;
+          ...
+          $ARR[$IDX]
+      - pattern-not-inside: |
+          if ($IDX >= $UB) goto $LABEL;
+          ...
+          $ARR[$IDX]
+      - pattern-not-inside: |
+          if ($IDX > $UB) return $VAL;
+          ...
+          $ARR[$IDX]
+      - pattern-not-inside: |
+          if ($IDX > $UB) goto $LABEL;
+          ...
+          $ARR[$IDX]
+      - pattern-not-inside: |
+          if ($IDX < $LB) return $VAL;
+          ...
+          $ARR[$IDX]
+      - pattern-not-inside: |
+          if ($IDX < $LB) goto $LABEL;
+          ...
+          $ARR[$IDX]
+      - pattern-not-inside: |
+          if ($IDX < $LB || $IDX >= $UB) return $VAL;
+          ...
+          $ARR[$IDX]
+      - pattern-not-inside: |
+          if ($IDX < $LB || $IDX >= $UB) goto $LABEL;
+          ...
+          $ARR[$IDX]
+      - pattern-not-inside: |
+          if ($IDX < $UB) {
+            ...
+            $ARR[$IDX]
+            ...
+          }
+      - pattern-not-inside: |
+          if ($IDX >= $LB && $IDX < $UB) {
+            ...
+            $ARR[$IDX]
+            ...
+          }
+      - pattern-not-inside: |
+          if ($IDX < $UB && $IDX >= $LB) {
+            ...
+            $ARR[$IDX]
+            ...
+          }
+      - pattern-not-inside: |
+          if ($LB <= $IDX && $IDX < $UB) {
+            ...
+            $ARR[$IDX]
+            ...
+          }
+      - pattern-not-inside: |
+          if ($IDX < $UB && $LB <= $IDX) {
+            ...
+            $ARR[$IDX]
+            ...
+          }
+
+      - focus-metavariable: $IDX
+
+  ###########################################################################
+  # 7. Incorrect combined bounds check using OR in an allow condition.
+  ###########################################################################
+  - id: cxx.suspicious-index-check.combined-allow-condition-uses-or
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Incorrect combined bounds check before accessing '$ARR[$IDX]'. The
+      condition uses logical OR between lower and upper bound checks, which can
+      allow out-of-bounds access. Use logical AND so both bounds must be true.
+    metadata:
+      category: security
+      confidence: HIGH
+      bug_type: incorrect array bounds check using OR instead of AND
+      cwe:
+        - "CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer"
+        - "CWE-125: Out-of-bounds Read"
+        - "CWE-787: Out-of-bounds Write"
+    patterns:
+      - pattern: $ARR[$IDX]
+      - pattern-inside: |
+          $T $ARR[$SIZE];
+          ...
+      - pattern-inside: |
+          if ($COND) {
+            ...
+          }
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            - pattern: $IDX >= 0 || $IDX < $SIZE
+            - pattern: $IDX < $SIZE || $IDX >= 0
+            - pattern: 0 <= $IDX || $IDX < $SIZE
+            - pattern: $IDX < $SIZE || 0 <= $IDX
+            - pattern: $IDX >= 0 || $SIZE > $IDX
+            - pattern: $SIZE > $IDX || $IDX >= 0
+            - pattern: 0 <= $IDX || $SIZE > $IDX
+            - pattern: $SIZE > $IDX || 0 <= $IDX
+
+  ###########################################################################
+  # 6. Combined lower + upper bound check exists, but lower bound is too low.
+  ###########################################################################
+  - id: cxx.suspicious-index-check.combined-bounds-wrong-lower
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Suspicious combined bounds check before accessing '$ARR[$IDX]'. The lower
+      bound '$LB' is below zero, so a negative index may be allowed.
+    metadata:
+      category: security
+      confidence: HIGH
+      bug_type: incorrect array bounds check
+      cwe:
+        - "CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer"
+        - "CWE-125: Out-of-bounds Read"
+        - "CWE-787: Out-of-bounds Write"
+    patterns:
+      - pattern: $ARR[$IDX]
+
+      - pattern-inside: |
+          $T $ARR[$SIZE];
+          ...
+
+      - pattern-either:
+          - patterns:
+              - pattern-inside: |
+                  if ($COND) {
+                    return $VAL;
+                  }
+                  ...
+                  $ARR[$IDX]
+
+              - metavariable-pattern:
+                  metavariable: $COND
+                  pattern-either:
+                    - pattern: $IDX < $LB || $IDX >= $UB
+                    - pattern: $IDX >= $UB || $IDX < $LB
+                    - pattern: $LB > $IDX || $IDX >= $UB
+                    - pattern: $IDX >= $UB || $LB > $IDX
+                    - pattern: $IDX < $LB || $UB <= $IDX
+                    - pattern: $UB <= $IDX || $IDX < $LB
+                    - pattern: $LB > $IDX || $UB <= $IDX
+                    - pattern: $UB <= $IDX || $LB > $IDX
+
+          - patterns:
+              - pattern-inside: |
+                  if ($COND) {
+                    ...
+                    $ARR[$IDX]
+                    ...
+                  }
+
+              - metavariable-pattern:
+                  metavariable: $COND
+                  pattern-either:
+                    - pattern: $IDX >= $LB && $IDX < $UB
+                    - pattern: $IDX < $UB && $IDX >= $LB
+                    - pattern: $LB <= $IDX && $IDX < $UB
+                    - pattern: $IDX < $UB && $LB <= $IDX
+                    - pattern: $IDX >= $LB && $UB > $IDX
+                    - pattern: $UB > $IDX && $IDX >= $LB
+                    - pattern: $LB <= $IDX && $UB > $IDX
+                    - pattern: $UB > $IDX && $LB <= $IDX
+
+      - metavariable-regex:
+          metavariable: $LB
+          regex: ^-?[0-9]+$
+
+      - metavariable-comparison:
+          metavariable: $LB
+          comparison: int($LB) < 0
+
+  ###########################################################################
+  # 5. Combined lower + upper bound check exists, but upper bound is too high.
+  ###########################################################################
+  - id: cxx.suspicious-index-check.combined-bounds-wrong-upper
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: >-
+      Suspicious combined bounds check before accessing '$ARR[$IDX]'. The upper
+      bound '$UB' is larger than the actual array size '$SIZE', so an
+      out-of-bounds index may be allowed.
+    metadata:
+      category: security
+      confidence: HIGH
+      bug_type: incorrect array bounds check
+      cwe:
+        - "CWE-119: Improper Restriction of Operations within the Bounds of a Memory Buffer"
+        - "CWE-125: Out-of-bounds Read"
+        - "CWE-787: Out-of-bounds Write"
+    patterns:
+      - pattern: $ARR[$IDX]
+
+      - pattern-inside: |
+          $T $ARR[$SIZE];
+          ...
+
+      - pattern-either:
+          - patterns:
+              - pattern-inside: |
+                  if ($COND) {
+                    return $VAL;
+                  }
+                  ...
+                  $ARR[$IDX]
+
+              - metavariable-pattern:
+                  metavariable: $COND
+                  pattern-either:
+                    - pattern: $IDX < $LB || $IDX >= $UB
+                    - pattern: $IDX >= $UB || $IDX < $LB
+                    - pattern: $LB > $IDX || $IDX >= $UB
+                    - pattern: $IDX >= $UB || $LB > $IDX
+                    - pattern: $IDX < $LB || $UB <= $IDX
+                    - pattern: $UB <= $IDX || $IDX < $LB
+                    - pattern: $LB > $IDX || $UB <= $IDX
+                    - pattern: $UB <= $IDX || $LB > $IDX
+
+          - patterns:
+              - pattern-inside: |
+                  if ($COND) {
+                    ...
+                    $ARR[$IDX]
+                    ...
+                  }
+
+              - metavariable-pattern:
+                  metavariable: $COND
+                  pattern-either:
+                    - pattern: $IDX >= $LB && $IDX < $UB
+                    - pattern: $IDX < $UB && $IDX >= $LB
+                    - pattern: $LB <= $IDX && $IDX < $UB
+                    - pattern: $IDX < $UB && $LB <= $IDX
+                    - pattern: $IDX >= $LB && $UB > $IDX
+                    - pattern: $UB > $IDX && $IDX >= $LB
+                    - pattern: $LB <= $IDX && $UB > $IDX
+                    - pattern: $UB > $IDX && $LB <= $IDX
+
+      - metavariable-regex:
+          metavariable: $SIZE
+          regex: ^[0-9]+$
+
+      - metavariable-regex:
+          metavariable: $UB
+          regex: ^[0-9]+$
+
+      - metavariable-comparison:
+          metavariable: $UB
+          comparison: int($UB) > int($SIZE)
+
+  ###########################################################################
+  # 2. Only lower-bound-looking check before array access.
+  ###########################################################################
+  - id: cxx.suspicious-index-check.lower-bound-only
+    languages:
+      - c
+      - cpp
+    severity: WARNING
+    message: Suspicious index check - only a lower-bound check appears before indexing '$ARR[$IDX]'. Verify that upper bound '$IDX < array_size' is also checked.
+    patterns:
+      - pattern: $ARR[$IDX]
+
+      - pattern-either:
+          - pattern-inside: |
+              $T $ARR[$SIZE];
+              ...
+          - pattern-inside: |
+              $T $ARR[$SIZE] = ...;
+              ...
+          - pattern-inside: |
+              const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME] = ...;
+              ...
+          - pattern-inside: |
+              constexpr int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              constexpr int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME] = ...;
+              ...
+          - pattern-inside: |
+              static const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              static const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME] = ...;
+              ...
+          - pattern-inside: |
+              enum { $SZNAME = $SIZE };
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              enum { $SZNAME = $SIZE };
+              ...
+              $T $ARR[$SZNAME] = ...;
+              ...
+          - pattern-inside: |
+              std::array<$T, $SIZE> $ARR;
+              ...
+          - pattern-inside: |
+              std::array<$T, $SIZE> $ARR = ...;
+              ...
+
+      - pattern-inside: |
+          if ($COND) {
+            return;
+          }
+          ...
+
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            - pattern: $IDX < $LB
+            - pattern: $IDX <= $LB
+            - pattern: $LB > $IDX
+            - pattern: $LB >= $IDX
+
+      - pattern-not-inside: |
+          if ($IDX >= $UB) {
+            return;
+          }
+          ...
+          $ARR[$IDX];
+      - pattern-not-inside: |
+          if ($IDX > $UB) {
+            return;
+          }
+          ...
+          $ARR[$IDX];
+      - pattern-not-inside: |
+          if ($UB <= $IDX) {
+            return;
+          }
+          ...
+          $ARR[$IDX];
+      - pattern-not-inside: |
+          if ($UB < $IDX) {
+            return;
+          }
+          ...
+          $ARR[$IDX];
+
+  ###########################################################################
+  # 4B. Lower bound is checked with <=, but the checked bound is too low.
+  ###########################################################################
+  - id: cxx.suspicious-index-check.lower-bound-too-low.le
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: Suspicious lower-bound index check before '$ARR[$IDX]'. Negative index values may still reach the array access.
+    patterns:
+      - pattern: $ARR[$IDX]
+
+      - pattern-either:
+          - pattern-inside: |
+              $T $ARR[$SIZE];
+              ...
+          - pattern-inside: |
+              $T $ARR[$SIZE] = ...;
+              ...
+          - pattern-inside: |
+              const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              constexpr int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              static const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              enum { $SZNAME = $SIZE };
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              std::array<$T, $SIZE> $ARR;
+              ...
+          - pattern-inside: |
+              std::array<$T, $SIZE> $ARR = ...;
+              ...
+
+      - pattern-inside: |
+          if ($COND) {
+            return;
+          }
+          ...
+
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            - pattern: $IDX <= $LB
+            - pattern: $LB >= $IDX
+
+      - metavariable-regex:
+          metavariable: $LB
+          regex: ^-?[0-9]+$
+
+      - metavariable-comparison:
+          metavariable: $LB
+          comparison: int($LB) < -1
+
+  ###########################################################################
+  # 4A. Lower bound is checked with <, but the checked bound is too low.
+  ###########################################################################
+  - id: cxx.suspicious-index-check.lower-bound-too-low.lt
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: Suspicious lower-bound index check before '$ARR[$IDX]'. Negative index values may still reach the array access.
+    patterns:
+      - pattern: $ARR[$IDX]
+
+      - pattern-either:
+          - pattern-inside: |
+              $T $ARR[$SIZE];
+              ...
+          - pattern-inside: |
+              $T $ARR[$SIZE] = ...;
+              ...
+          - pattern-inside: |
+              const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              constexpr int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              static const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              enum { $SZNAME = $SIZE };
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              std::array<$T, $SIZE> $ARR;
+              ...
+          - pattern-inside: |
+              std::array<$T, $SIZE> $ARR = ...;
+              ...
+
+      - pattern-inside: |
+          if ($COND) {
+            return;
+          }
+          ...
+
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            - pattern: $IDX < $LB
+            - pattern: $LB > $IDX
+
+      - metavariable-regex:
+          metavariable: $LB
+          regex: ^-?[0-9]+$
+
+      - metavariable-comparison:
+          metavariable: $LB
+          comparison: int($LB) < 0
+
+  ###########################################################################
+  # 1. Only upper-bound-looking check before array access.
+  ###########################################################################
+  - id: cxx.suspicious-index-check.upper-bound-only
+    languages:
+      - c
+      - cpp
+    severity: WARNING
+    message: Suspicious index check - only an upper-bound check appears before indexing '$ARR[$IDX]'. Verify that lower bound '$IDX >= 0' is also checked.
+    patterns:
+      - pattern: $ARR[$IDX]
+
+      - pattern-either:
+          - pattern-inside: |
+              $T $ARR[$SIZE];
+              ...
+          - pattern-inside: |
+              $T $ARR[$SIZE] = ...;
+              ...
+          - pattern-inside: |
+              const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME] = ...;
+              ...
+          - pattern-inside: |
+              constexpr int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              constexpr int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME] = ...;
+              ...
+          - pattern-inside: |
+              static const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              static const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME] = ...;
+              ...
+          - pattern-inside: |
+              enum { $SZNAME = $SIZE };
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              enum { $SZNAME = $SIZE };
+              ...
+              $T $ARR[$SZNAME] = ...;
+              ...
+          - pattern-inside: |
+              std::array<$T, $SIZE> $ARR;
+              ...
+          - pattern-inside: |
+              std::array<$T, $SIZE> $ARR = ...;
+              ...
+
+      - pattern-inside: |
+          if ($COND) {
+            return;
+          }
+          ...
+
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            - pattern: $IDX >= $UB
+            - pattern: $IDX > $UB
+            - pattern: $UB <= $IDX
+            - pattern: $UB < $IDX
+
+      - pattern-not-inside: |
+          if ($IDX < $LB) {
+            return;
+          }
+          ...
+          $ARR[$IDX];
+      - pattern-not-inside: |
+          if ($IDX <= $LB) {
+            return;
+          }
+          ...
+          $ARR[$IDX];
+      - pattern-not-inside: |
+          if ($LB > $IDX) {
+            return;
+          }
+          ...
+          $ARR[$IDX];
+      - pattern-not-inside: |
+          if ($LB >= $IDX) {
+            return;
+          }
+          ...
+          $ARR[$IDX];
+
+  ###########################################################################
+  # 3A. Upper bound is checked with >=, but the checked bound is too high.
+  ###########################################################################
+  - id: cxx.suspicious-index-check.upper-bound-too-high.ge
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: Suspicious upper-bound index check before '$ARR[$IDX]'. The checked upper bound appears too high for the array size.
+    patterns:
+      - pattern: $ARR[$IDX]
+
+      - pattern-either:
+          - pattern-inside: |
+              $T $ARR[$SIZE];
+              ...
+          - pattern-inside: |
+              $T $ARR[$SIZE] = ...;
+              ...
+          - pattern-inside: |
+              const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              constexpr int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              static const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              enum { $SZNAME = $SIZE };
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              std::array<$T, $SIZE> $ARR;
+              ...
+          - pattern-inside: |
+              std::array<$T, $SIZE> $ARR = ...;
+              ...
+
+      - pattern-inside: |
+          if ($COND) {
+            return;
+          }
+          ...
+
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            - pattern: $IDX >= $UB
+            - pattern: $UB <= $IDX
+
+      - metavariable-regex:
+          metavariable: $SIZE
+          regex: ^[0-9]+$
+
+      - metavariable-regex:
+          metavariable: $UB
+          regex: ^[0-9]+$
+
+      - metavariable-comparison:
+          metavariable: $UB
+          comparison: int($UB) > int($SIZE)
+
+  ###########################################################################
+  # 3B. Upper bound is checked with >, but the checked bound is too high.
+  ###########################################################################
+  - id: cxx.suspicious-index-check.upper-bound-too-high.gt
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    message: Suspicious upper-bound index check before '$ARR[$IDX]'. The checked upper bound appears too high for the array size.
+    patterns:
+      - pattern: $ARR[$IDX]
+
+      - pattern-either:
+          - pattern-inside: |
+              $T $ARR[$SIZE];
+              ...
+          - pattern-inside: |
+              $T $ARR[$SIZE] = ...;
+              ...
+          - pattern-inside: |
+              const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              constexpr int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              static const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              enum { $SZNAME = $SIZE };
+              ...
+              $T $ARR[$SZNAME];
+              ...
+          - pattern-inside: |
+              std::array<$T, $SIZE> $ARR;
+              ...
+          - pattern-inside: |
+              std::array<$T, $SIZE> $ARR = ...;
+              ...
+
+      - pattern-inside: |
+          if ($COND) {
+            return;
+          }
+          ...
+
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            - pattern: $IDX > $UB
+            - pattern: $UB < $IDX
+
+      - metavariable-regex:
+          metavariable: $SIZE
+          regex: ^[0-9]+$
+
+      - metavariable-regex:
+          metavariable: $UB
+          regex: ^[0-9]+$
+
+      - metavariable-comparison:
+          metavariable: $UB
+          comparison: int($UB) >= int($SIZE)
+
+  ###########################################################################
+  # 9. Suspicious index check against zero only.
+  ###########################################################################
+  - id: cxx.suspicious-index-check.zero
+    languages:
+      - c
+      - cpp
+    severity: WARNING
+    message: >-
+      Suspicious index check against zero before array access. The index is
+      checked only against zero but not against the upper array boundary.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $T $ARR[$SIZE];
+              ...
+              if ($COND) {
+                ...
+                $ARR[$IDX] = $VAL;
+                ...
+              }
+          - pattern: |
+              $T $ARR[$SIZE];
+              ...
+              if ($COND) {
+                ...
+                $DST = $ARR[$IDX];
+                ...
+              }
+          - pattern: |
+              $T $ARR[$SIZE];
+              ...
+              if ($COND) {
+                ...
+                $FUNC(..., $ARR[$IDX], ...);
+                ...
+              }
+          - pattern: |
+              const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+              if ($COND) {
+                ...
+                $ARR[$IDX] = $VAL;
+                ...
+              }
+          - pattern: |
+              const int $SZNAME = $SIZE;
+              ...
+              $T $ARR[$SZNAME];
+              ...
+              if ($COND) {
+                ...
+                $DST = $ARR[$IDX];
+                ...
+              }
+
+      - metavariable-pattern:
+          metavariable: $COND
+          pattern-either:
+            - pattern: $IDX > 0
+            - pattern: $IDX >= 0
+            - pattern: 0 < $IDX
+            - pattern: 0 <= $IDX
+
+    metadata:
+      category: security
+      confidence: medium
+      cwe:
+        - CWE-119
+        - CWE-787
+
+  ###########################################################################
+  # UNINIT.HEAP.MIGHT
+  ###########################################################################
+  - id: uninit.heap.might.conditional-init-before-read
+    languages:
+      - c
+      - cpp
+    severity: WARNING
+    message: >-
+      Heap memory allocated by a non-initializing allocator may be read before
+      initialization. The initialization appears to happen only conditionally,
+      so some paths may use uninitialized heap memory.
+    metadata:
+      checker: UNINIT.HEAP.MIGHT
+      category: security
+      cwe:
+        - "CWE-457: Use of Uninitialized Variable"
+      confidence: MEDIUM
+      technology:
+        - c
+        - cpp
+        - drivers
+      remediation: >-
+        Ensure the allocated buffer is initialized on all paths before it is
+        read. Use memset, memcpy from a valid source, calloc, kzalloc, or another
+        zero-initializing allocator when appropriate.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $P = $ALLOC_FN(...);
+              ...
+              if ($COND) {
+                ...
+                $INIT_FN($P, ...);
+                ...
+              }
+              ...
+              $READ;
+
+          - pattern: |
+              $T *$P = $ALLOC_FN(...);
+              ...
+              if ($COND) {
+                ...
+                $INIT_FN($P, ...);
+                ...
+              }
+              ...
+              $READ;
+
+      - metavariable-regex:
+          metavariable: $ALLOC_FN
+          regex: ^(malloc|kmalloc|devm_kmalloc|vmalloc|krealloc|realloc)$
+
+      - metavariable-regex:
+          metavariable: $INIT_FN
+          regex: ^(memset|bzero|memcpy|memmove|strncpy|strlcpy|snprintf)$
+
+      - metavariable-pattern:
+          metavariable: $READ
+          patterns:
+            - pattern-either:
+                - pattern: $X = *$P
+                - pattern: return *$P
+                - pattern: $FUNC(..., *$P, ...)
+                - pattern: $X = $P[$IDX]
+                - pattern: "return $P[$IDX];"
+                - pattern: $FUNC(..., $P[$IDX], ...)
+                - pattern: $X = $P->$FIELD
+                - pattern: return $P->$FIELD
+                - pattern: $FUNC(..., $P->$FIELD, ...)
+                - pattern: memcpy($DST, $P, ...)
+                - pattern: memmove($DST, $P, ...)
+                - pattern: memcmp($P, $OTHER, ...)
+                - pattern: memcmp($OTHER, $P, ...)
+                - pattern: memchr($P, $CH, ...)
+                - pattern: strlen($P)
+                - pattern: strnlen($P, ...)
+                - pattern: copy_to_user($DST, $P, ...)
+                - pattern: copyout($DST, $P, ...)
+
+      - pattern-not: |
+          $P = $ALLOC_FN(...);
+          ...
+          if ($COND) {
+            ...
+            $INIT_FN($P, ...);
+            ...
+          } else {
+            ...
+            $INIT_FN($P, ...);
+            ...
+          }
+          ...
+          $READ;
+
+      - pattern-not: |
+          $T *$P = $ALLOC_FN(...);
+          ...
+          if ($COND) {
+            ...
+            $INIT_FN($P, ...);
+            ...
+          } else {
+            ...
+            $INIT_FN($P, ...);
+            ...
+          }
+          ...
+          $READ;
+
+  ###########################################################################
+  # UNINIT.HEAP.MUST
+  ###########################################################################
+  - id: uninit.heap.must
+    languages:
+      - c
+      - cpp
+    severity: ERROR
+    mode: taint
+    message: >-
+      Heap memory allocated by an uninitialized allocator is read before visible
+      initialization. Initialize the memory before first use, or use calloc/kzalloc
+      when zero-initialization is intended.
+    metadata:
+      category: security
+      checker: UNINIT.HEAP.MUST
+      cwe:
+        - "CWE-457: Use of Uninitialized Variable"
+      confidence: HIGH
+      technology:
+        - c
+        - cpp
+        - drivers
+      remediation: >-
+        Initialize allocated memory before reading it. Use memset, memcpy from a
+        valid source, calloc, kzalloc, or another zero-initializing allocator.
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: malloc($SIZE)
+              - pattern: kmalloc($SIZE, ...)
+              - pattern: devm_kmalloc($DEV, $SIZE, ...)
+              - pattern: vmalloc($SIZE)
+
+    pattern-sanitizers:
+      - patterns:
+          - pattern-either:
+              - pattern: memset($P, $VALUE, $SIZE)
+              - pattern: bzero($P, $SIZE)
+              - pattern: memcpy($P, $SRC, $SIZE)
+              - pattern: memmove($P, $SRC, $SIZE)
+          - focus-metavariable: $P
+        by-side-effect: true
+
+      - pattern-either:
+          - pattern: calloc($COUNT, $SIZE)
+          - pattern: kzalloc($SIZE, ...)
+          - pattern: devm_kzalloc($DEV, $SIZE, ...)
+          - pattern: vzalloc($SIZE)
+
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: "*$P"
+              - pattern: $P[$IDX]
+              - pattern: $P->$FIELD
+              - pattern: memcpy($DST, $P, $SIZE)
+              - pattern: memmove($DST, $P, $SIZE)
+              - pattern: memcmp($P, $OTHER, $SIZE)
+              - pattern: memcmp($OTHER, $P, $SIZE)
+              - pattern: memchr($P, $CH, $SIZE)
+              - pattern: strlen($P)
+              - pattern: strnlen($P, $SIZE)
+
+          - pattern-not-inside: |
+              *$P = ...;
+          - pattern-not-inside: |
+              $P[$IDX] = ...;
+          - pattern-not-inside: |
+              $P->$FIELD = ...;
