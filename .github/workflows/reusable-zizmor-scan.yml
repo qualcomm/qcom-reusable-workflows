@@ -43,12 +43,13 @@ jobs:
         id: gate
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           # Default true: run the scan unless an admin has explicitly set the
           # property to a falsey value. Missing/unset property -> run (fail open
           # to scanning, since the enterprise default is true).
-          value="$(gh api "repos/${{ github.repository }}/properties/values" \
+          value="$(gh api "repos/${REPO}/properties/values" \
             --jq '.[] | select(.property_name=="Require-actions-security-scan") | .value' \
             2>/dev/null || true)"
           value="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
@@ -83,9 +84,11 @@ jobs:
 
       - name: Verify central policy is present (fail closed)
         id: policy
+        env:
+          CONFIG_PATH: ${{ inputs.zizmor-config-path }}
         run: |
           set -euo pipefail
-          cfg=".zizmor-central/${{ inputs.zizmor-config-path }}"
+          cfg=".zizmor-central/${CONFIG_PATH}"
           if [ ! -s "$cfg" ]; then
             echo "::error::Trusted zizmor config not found at ${cfg}. Failing closed." >&2
             exit 1
