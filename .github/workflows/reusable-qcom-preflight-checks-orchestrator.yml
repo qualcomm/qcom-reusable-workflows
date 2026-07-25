@@ -57,6 +57,16 @@ jobs:
       contents: read
       security-events: write
 
+  # Deliberately NO enable-zizmor-scan input: admins control this via the
+  # enterprise custom property Require-actions-security-scan.
+  zizmor-scan:
+    name: Zizmor Scan
+    uses: ./.github/workflows/reusable-zizmor-scan.yml
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
   dependency-review:
     if: ${{ inputs.enable-dependency-review }}
     name: Dependency Review
