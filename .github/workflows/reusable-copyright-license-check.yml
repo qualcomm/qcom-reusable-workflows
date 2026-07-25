@@ -22,14 +22,19 @@ jobs:
  
       - name: Get base and head SHAs (from event payload, no token needed)
         id: shas
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           git fetch --no-tags --prune origin \
-            "+refs/heads/${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}"
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
 
       - name: Generate patch for PR changes only (GitHub PR-style 3-dot diff)
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          BASE="origin/${{ github.event.pull_request.base.ref }}"
-          HEAD="${{ github.event.pull_request.head.sha }}"
+          BASE="origin/${BASE_REF}"
+          HEAD="${HEAD_SHA}"
 
           # GitHub PRs show a three-dot diff: merge-base(base, head) -> head.
           # Using the live base branch tip (not the stale SHA from the event
