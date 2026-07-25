@@ -25,7 +25,11 @@ on:
 permissions:
   contents: read
   security-events: write   # upload SARIF to code scanning
-  actions: read            # required by zizmor-action for private/internal repos
+  # NOTE: zizmor-action also wants `actions: read` for advanced-security on
+  # private/internal repos. Deliberately omitted: callers (~500, almost all
+  # public) don't grant it, and requesting more than the caller allows is a
+  # hard error. Public repos don't need it; on private repos the upload is a
+  # no-op tolerated by continue-on-error. Revisit when onboarding private repos.
 
 jobs:
   # Admin-gated enable/disable via the enterprise custom property

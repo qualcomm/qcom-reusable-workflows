@@ -65,7 +65,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: read
 
   dependency-review:
     if: ${{ inputs.enable-dependency-review }}
