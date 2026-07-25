@@ -15,8 +15,11 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Parse version and update major tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          FULL_TAG="${{ github.event.release.tag_name }}"
+          FULL_TAG="${RELEASE_TAG}"
           echo "Release tag : ${FULL_TAG}"
 
           # Only process tags that match strict semver: vX.Y.Z
@@ -37,7 +40,7 @@ jobs:
             echo "Action      : CREATE ${MAJOR_TAG} (new major release)"
           fi
 
-          git tag -f "${MAJOR_TAG}" "${{ github.sha }}"
+          git tag -f "${MAJOR_TAG}" "${COMMIT_SHA}"
           git push origin "${MAJOR_TAG}" --force
 
-          echo "✓ ${MAJOR_TAG} now points to ${{ github.sha }} (${FULL_TAG})"
+          echo "✓ ${MAJOR_TAG} now points to ${COMMIT_SHA} (${FULL_TAG})"
