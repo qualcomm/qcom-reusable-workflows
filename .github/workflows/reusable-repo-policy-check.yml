@@ -1,0 +1,26 @@
+name: Repository Policy Check Reusable Workflow
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  run-repo-policy-check:
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+    name: Run Repository Policy Check (shadow mode)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run Repository Policy Check
+        # TODO: qualcomm/repo-policy-action has no released version yet — pinned to
+        # @main per team decision. Update to a proper vX tag once one is cut.
+        # This step is non-blocking (continue-on-error) while its output is
+        # compared against repolinter's before it becomes the enforced gate.
+        continue-on-error: true
+        uses: qualcomm/repo-policy-action@main
+        with:
+          config_url: "https://raw.githubusercontent.com/qualcomm/.github/main/repolint.json"
