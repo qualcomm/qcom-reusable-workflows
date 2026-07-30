@@ -14,7 +14,11 @@ on:
       enable-repolinter-check:
         required: false
         type: boolean
-        default: true        
+        default: true
+      enable-repo-policy-check:
+        required: false
+        type: boolean
+        default: true
       enable-copyright-license-check:
         required: false
         type: boolean
@@ -68,6 +72,13 @@ jobs:
     if: ${{ inputs.enable-repolinter-check }}
     name: Repolinter Check
     uses: ./.github/workflows/reusable-repolinter-check.yml
+    permissions:
+      contents: read
+
+  repo-policy-check:
+    if: ${{ inputs.enable-repo-policy-check }}
+    name: Repository Policy Check
+    uses: ./.github/workflows/reusable-repo-policy-check.yml
     permissions:
       contents: read
 
