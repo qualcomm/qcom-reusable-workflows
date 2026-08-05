@@ -45,6 +45,16 @@ on:
         type: string
         default: ''
         description: 'ARMOR checker options as JSON string.e.g., {"build-script":"ci/build.sh","runs-on":{"group":"<group>","labels":["<l1>","<l2>"]}}'
+      enable-full-repo-scan:
+        required: false
+        type: boolean
+        default: false
+        description: 'Enable the full-repository copyright and license scan (scans every tracked source file, not just the PR diff).'
+      full-repo-scan-fail-on-findings:
+        required: false
+        type: string
+        default: 'true'
+        description: 'When the full-repo scan is enabled, fail the run on blocking findings. "true" to enforce, anything else to report only.'
 
 jobs:
   semgrep-scan:
@@ -100,5 +110,14 @@ jobs:
     uses: qualcomm/armor-checkers/.github/workflows/armor-checker.yml@v1
     with:
       armor-checker-options: ${{ inputs.armor-checker-options }}
+    permissions:
+      contents: read
+
+  full-repo-scan:
+    if: ${{ inputs.enable-full-repo-scan }}
+    name: Full-Repo Copyright and License Scan
+    uses: ./.github/workflows/reusable-full-repo-scan.yml
+    with:
+      fail_on_findings: ${{ inputs.full-repo-scan-fail-on-findings }}
     permissions:
       contents: read
