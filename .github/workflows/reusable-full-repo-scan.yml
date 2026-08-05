@@ -1,0 +1,25 @@
+name: Full-Repo Copyright License Scan Reusable Workflow
+on:
+  workflow_call:
+    inputs:
+      fail_on_findings:
+        required: false
+        type: string
+        default: 'false'
+
+permissions:
+  contents: read
+
+jobs:
+  run-full-repo-scan:
+    name: Run Full-Repo Copyright and License Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Run Full-Repo Copyright License Scan Action
+        uses: qualcomm/copyright-license-checker-action/full-scan@full_scan
+        with:
+          repo_name: ${{ github.repository }}
+          fail_on_findings: ${{ inputs.fail_on_findings }}
