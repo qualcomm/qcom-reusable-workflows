@@ -14,7 +14,12 @@ on:
       enable-repolinter-check:
         required: false
         type: boolean
-        default: true        
+        default: true
+      repolint-config-path:
+        required: false
+        type: string
+        default: "repolint.json"
+        description: 'Path to a local repolinter ruleset override, relative to repo root'
       enable-copyright-license-check:
         required: false
         type: boolean
@@ -68,6 +73,8 @@ jobs:
     if: ${{ inputs.enable-repolinter-check }}
     name: Repolinter Check
     uses: ./.github/workflows/reusable-repolinter-check.yml
+    with:
+      repolint-config-path: ${{ inputs.repolint-config-path }}
     permissions:
       contents: read
 
