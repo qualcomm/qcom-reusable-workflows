@@ -4,24 +4,31 @@ on:
 
 permissions:
   contents: read
-  
+
 jobs:
   run-copyright-license-check:
-    if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
+    # Runs on pull_request (diff base...head) and on push (diff the pushed
+    # commit range). PR 'closed' events are skipped.
+    if: >-
+      (github.event_name == 'pull_request' && github.event.action != 'closed')
+      || github.event_name == 'push'
     name: Run Copyright License Check
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout PR head
+      - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0    # Full history so we can diff properly.
                             # On pull_request events, actions/checkout fetches
                             # refs/pull/N/merge whose parents are base.sha and
                             # head.sha — both are already present after this step.
-         
- 
+                            # On push events the full history makes the "before"
+                            # SHA reachable for the pushed-range diff below.
+
+      # ---------------- Pull-request path ----------------
       - name: Get base and head SHAs (from event payload, no token needed)
         id: shas
+        if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
@@ -29,6 +36,7 @@ jobs:
             "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
 
       - name: Generate patch for PR changes only (GitHub PR-style 3-dot diff)
+        if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -41,6 +49,44 @@ jobs:
           # payload) ensures the patch always matches the GitHub PR UI diff.
 
           git diff "${BASE}...${HEAD}" > pr.patch
+          head -n 100 pr.patch
+
+      # ---------------- Push path ----------------
+      - name: Generate patch for pushed commits only
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          ZERO="0000000000000000000000000000000000000000"
+
+          if [ "${AFTER}" = "${ZERO}" ]; then
+            # Branch deletion: nothing to scan.
+            echo "Branch deletion push detected; nothing to scan."
+            : > pr.patch
+          elif [ "${BEFORE}" = "${ZERO}" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            # New branch / first push, or the previous tip is unreachable (e.g.
+            # a force-push that orphaned it). There is no usable "before" commit,
+            # so fall back to comparing the pushed tip against the default branch.
+            git fetch --no-tags --prune origin \
+              "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}" || true
+            if git rev-parse -q --verify "origin/${DEFAULT_BRANCH}" >/dev/null \
+               && [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/${DEFAULT_BRANCH}")" ]; then
+              # 3-dot diff (merge-base -> pushed tip), same shape as the PR path.
+              git diff "origin/${DEFAULT_BRANCH}...${AFTER}" > pr.patch
+            else
+              # First push of the default branch itself: no baseline exists, so
+              # every file is new. Diff against the empty tree.
+              EMPTY_TREE="$(git hash-object -t tree /dev/null)"
+              git diff "${EMPTY_TREE}" "${AFTER}" > pr.patch
+            fi
+          else
+            # Normal push: diff the pushed commit range (all commits between the
+            # old and new branch tip), matching the net change of the push.
+            git diff "${BEFORE}..${AFTER}" > pr.patch
+          fi
+
           head -n 100 pr.patch
 
       - name: Run Copyright License Check Action
