@@ -12,6 +12,10 @@ permissions:
 
 jobs:
   run-full-repo-scan:
+    # Whole-repo scan runs on push/dispatch only; PRs get the diff-based copyright/license
+    # check. Skipped on pull_request even if a caller sets enable-full-repo-scan, gated on
+    # github.event_name like reusable-semgrep-scan.yml.
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
     name: Run Full-Repo Copyright and License Scan
     runs-on: ubuntu-latest
     steps:
