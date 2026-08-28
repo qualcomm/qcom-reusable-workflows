@@ -1,0 +1,195 @@
+name: LAVA test job summary
+inputs:
+  build_id:
+    description: "ID of the workflow from which build URL will be downloaded"
+    required: true
+  gh_token:
+    description: "Github token. It's required to download artifacts from the workflow"
+    required: true
+  prefix:
+    description: "Prefix for the compressed file that is uploaded as workflow artifact"
+    default: test-job*
+  summary_file_name:
+    description: "File name that is used to save test job summary"
+    default: step-summary.txt
+  summary_title:
+    description: "Title for the summary part of the report"
+    required: false
+  lava_url:
+    description: "Hostname of the LAVA instance the results are read from, without the scheme"
+    required: false
+    default: lava.infra.foundries.io
+outputs:
+  artifact_id:
+    description: "ID of the uploaded artifact"
+    value: ${{ steps.upload-summary.outputs.artifact-id }}
+runs:
+  using: "composite"
+
+  steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          github-token: ${{ inputs.gh_token }}
+          run-id: ${{ inputs.build_id }}
+          path: artifacts
+          pattern: ${{ inputs.prefix }}
+
+      - name: "List files"
+        shell: bash
+        run: |
+          echo $GITHUB_WORKSPACE
+          ls -R $GITHUB_WORKSPACE
+
+      - name: Publish Test Job Details
+        shell: bash
+        env:
+          INPUTS_PREFIX: ${{ inputs.prefix }}
+          INPUTS_SUMMARY_FILE_NAME: ${{ inputs.summary_file_name }}
+          INPUTS_SUMMARY_TITLE: ${{ inputs.summary_title }}
+          INPUTS_LAVA_URL: ${{ inputs.lava_url }}
+        run: |
+          set -x
+          LAVA_BASE="https://${INPUTS_LAVA_URL}"
+          # When a failed LAVA job is re-run, GitHub keeps the original failed
+          # job's "<distro>-test-job-<id>" artifact AND adds a new artifact for the
+          # re-submitted job (LAVA assigns a fresh, higher id). Both get downloaded
+          # here, so without de-duplication the stale failed job is counted again
+          # and the summary reports phantom failures even after a green re-run.
+          # Keep only the newest LAVA job (highest id) per device + test, keyed by
+          # (requested_device_type, description) which is stable across re-runs of
+          # the same job. The fields are read from the saved job-detail JSON.
+          declare -A KEEP_FILE
+          declare -A KEEP_ID
+          for TESTJOB in $(find "${GITHUB_WORKSPACE}" -name "${INPUTS_PREFIX}.json")
+          do
+              KEY=$(jq -r '"\(.requested_device_type)@@\(.description)"' "${TESTJOB}")
+              JOB_ID=$(jq -r '.id' "${TESTJOB}")
+              if [ -z "${KEEP_ID[$KEY]:-}" ] || [ "${JOB_ID}" -gt "${KEEP_ID[$KEY]}" ]; then
+                  KEEP_ID["$KEY"]="${JOB_ID}"
+                  KEEP_FILE["$KEY"]="${TESTJOB}"
+              fi
+          done
+          TESTJOBS=$(printf '%s\n' "${KEEP_FILE[@]}")
+
+          INPUT=$(for TESTJOB in ${TESTJOBS}
+          do
+              JOB_ID=$(cat "$TESTJOB" | jq ".id")
+              JOB_URL="${LAVA_BASE}/results/$JOB_ID"
+              JOB_DETAILS=$(curl -s "${LAVA_BASE}/api/v0.2/jobs/$JOB_ID/")
+              JOB_HEALTH=$(echo "$JOB_DETAILS" | jq -r ".health")
+              JOB_STATE=$(echo "$JOB_DETAILS" | jq -r ".state")
+              JOB_DEVICE_TYPE=$(echo "$JOB_DETAILS" | jq -r ".requested_device_type")
+              JOB_TITLE=$(echo "$JOB_DETAILS" | jq -r ".description")
+              JOB_TYPE="test"
+              if echo "${JOB_TITLE}" | grep -q "boot"; then
+                  JOB_TYPE="boot"
+              fi
+              # get suites and results
+              JOB_SUITES=$(curl -s "${LAVA_BASE}/api/v0.2/jobs/$JOB_ID/suites/")
+              TEST_RESULTS=$(for SUITE in $(echo "$JOB_SUITES" | jq -r -c ".results[]")
+              do
+                  if [ "${JOB_TYPE}" = "test" ]; then
+                      if [ "${JOB_STATE}" = "Finished" ]; then
+                          SUITE_NAME=$(echo "$SUITE" | jq -r ".name")
+                          SUITE_ID=$(echo "$SUITE" | jq -r ".id")
+                          SUITE_TESTS=$(curl -s "${LAVA_BASE}/api/v0.2/jobs/$JOB_ID/suites/$SUITE_ID/tests/")
+                          if [ "$SUITE_NAME" != "lava" ]; then
+                              echo "$SUITE_TESTS" | jq ".results[] | {(.name): {result: .result, url: .resource_uri}} | to_entries | .[]"
+                          fi
+                      fi
+                  else
+                      if [ "${JOB_STATE}" = "Finished" ] && [ ${JOB_HEALTH} = "Complete" ]; then
+                          TEST_RESULT_BOOT="pass"
+                      else
+                          TEST_RESULT_BOOT="fail"
+                      fi
+                      TEST_NAME="boot"
+                      TEST_URL="${JOB_URL}"
+                      TEST_RESULT_OBJ=$(jq --arg url "$TEST_URL" --arg result "$TEST_RESULT_BOOT" -n -c '$ARGS.named')
+                      jq -n -c --arg key "$TEST_NAME" --argjson value "$TEST_RESULT_OBJ" '$ARGS.named'
+                  fi
+              done | jq -s -c --sort-keys 'from_entries')
+              echo "{\"key\": \"$JOB_DEVICE_TYPE\", \"value\": $TEST_RESULTS}" | jq
+          # combine entries from boot jobs and pre-merge jobs
+          done | jq -s -c 'reduce .[] as $i ({}; .[$i.key] = ((.[$i.key] // {}) + $i.value))')
+          echo "$INPUT"
+          DEVICES=$(echo "$INPUT" | jq -r 'keys[]' | sort)
+
+          RESULTS=$(echo "$INPUT" | jq -r '.[] | keys[]?' | sort -u)
+
+          # Print collapsible box
+          echo "<details>" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          # Print section summary
+          TOTAL_PASS=$(echo "${INPUT}" | jq '[.. | objects | select(.result? == "pass")] | length')
+          TOTAL_FAIL=$(echo "${INPUT}" | jq '[.. | objects | select(.result? == "fail")] | length')
+          TOTAL=$(echo "${INPUT}" | jq '[.. | objects | select(.result)] | length')
+          SUMMARY_TITLE=""
+          if [ "${INPUTS_SUMMARY_TITLE}" != "" ]; then
+            SUMMARY_TITLE="${INPUTS_SUMMARY_TITLE}<br/>"
+          fi
+          echo "<summary>${SUMMARY_TITLE}Pass: $TOTAL_PASS | Fail: $TOTAL_FAIL | Total: $TOTAL </summary>" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          echo "" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          echo "" >> "${INPUTS_SUMMARY_FILE_NAME}"
+
+          # Print header row
+          printf "| %s |" "Test"
+          printf "| %s |" "Test" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          for D in $DEVICES; do
+            printf " %s |" "$D"
+            printf " %s |" "$D" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          done
+          echo
+          echo "" >> "${INPUTS_SUMMARY_FILE_NAME}"
+
+          ## Print separator
+          printf "| ---- |"
+          printf "| ---- |" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          for _ in $DEVICES; do
+            printf " ---- |"
+            printf " ---- |" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          done
+          echo
+          echo "" >> "${INPUTS_SUMMARY_FILE_NAME}"
+
+          for R in $RESULTS; do
+            printf "| %s |" "$R"
+            printf "| %s |" "$R" >> "${INPUTS_SUMMARY_FILE_NAME}"
+
+            for D in $DEVICES; do
+              VALUE=$(echo "$INPUT" | jq -r --arg d "$D" --arg r "$R" '.[$d][$r].result // ""')
+              URL=$(echo "$INPUT" | jq -r --arg d "$D" --arg r "$R" '.[$d][$r].url // ""')
+              CHECKMARK=":white_check_mark:"
+              if [ "${VALUE}" = "fail" ]; then CHECKMARK=":x:"; fi
+              if [ "${VALUE}" = "skip" ]; then CHECKMARK=":warning:"; fi
+              if [ -z "${VALUE}" ]; then CHECKMARK=":no_entry_sign:"; fi
+              printf " %s [%s](%s) |" "$CHECKMARK" "$VALUE" "$URL"
+              printf " %s [%s](%s) |" "$CHECKMARK" "$VALUE" "$URL" >> "${INPUTS_SUMMARY_FILE_NAME}"
+            done
+            echo "" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          done
+          echo "" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          echo "</details>" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          echo "<details>" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          echo "<summary>All jobs summary</summary>" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          echo "" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          echo "| Job ID | Device | State | Health |" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          echo "| ---- | ---- | ---- | ---- |" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          for TESTJOB in ${TESTJOBS}
+          do
+              JOB_ID=$(cat "${TESTJOB}" | jq ".id")
+              JOB_URL="${LAVA_BASE}/results/$JOB_ID"
+              JOB_DETAILS=$(curl -s "${LAVA_BASE}/api/v0.2/jobs/$JOB_ID/")
+              JOB_HEALTH=$(echo "$JOB_DETAILS" | jq -r ".health")
+              JOB_STATE=$(echo "$JOB_DETAILS" | jq -r ".state")
+              JOB_DEVICE_TYPE=$(echo "$JOB_DETAILS" | jq -r ".requested_device_type")
+              echo "| [$JOB_ID]($JOB_URL) | $JOB_DEVICE_TYPE | $JOB_STATE | $JOB_HEALTH |" >> "${INPUTS_SUMMARY_FILE_NAME}"
+          done
+          echo "</details>" >> "${INPUTS_SUMMARY_FILE_NAME}"
+      - name: Upload summary
+        id: upload-summary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          path: "${{ inputs.summary_file_name }}"
+          name: "${{ inputs.summary_file_name }}"
+
