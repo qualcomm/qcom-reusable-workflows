@@ -66,6 +66,8 @@ jobs:
         uses: qualcomm/copyright-license-checker-action/full-scan@full_scan
         with:
           repo_name: ${{ github.repository }}
-          # Report-only: the whole-repo sweep covers pre-existing files nobody touched in
-          # this push, so findings are surfaced as warnings instead of failing the run.
-          fail_on_findings: 'false'
+          # Blocking findings fail the run. This sweep covers pre-existing files nobody
+          # touched in this push, so legacy findings surface as failures. It also fails when
+          # no license baseline can be established: a repo is expected to carry a valid
+          # top-level LICENSE, so that is a genuine finding, not a scanner artifact.
+          fail_on_findings: 'true'
