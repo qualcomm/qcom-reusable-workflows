@@ -48,3 +48,24 @@ jobs:
         with:
           patch_file: pr.patch
           repo_name: ${{ github.repository }}
+
+  run-full-repo-scan:
+    # Complements the PR diff check above. A whole-repo sweep only makes sense on branch
+    # pushes / manual dispatch (a PR gets the diff-based check), and only for non-public
+    # repos, so public repos are not swept on every push.
+    if: >-
+      ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && (github.event.repository.visibility == 'internal' || github.event.repository.visibility == 'private') }}
+    name: Run Full-Repo Copyright and License Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Run Full-Repo Copyright License Scan Action
+        uses: qualcomm/copyright-license-checker-action/full-scan@full_scan
+        with:
+          repo_name: ${{ github.repository }}
+          # Report-only: the whole-repo sweep covers pre-existing files nobody touched in
+          # this push, so findings are surfaced as warnings instead of failing the run.
+          fail_on_findings: 'false'
