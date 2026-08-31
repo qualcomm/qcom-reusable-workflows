@@ -12,15 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Run Repository Policy Check
-        # TODO: qualcomm/repo-policy-action has no released version yet — pinned to
-        # @main per team decision. Update to a proper vX tag once one is cut.
         # This step is non-blocking (continue-on-error) while its output is
         # compared against repolinter's before it becomes the enforced gate.
         continue-on-error: true
-        uses: qualcomm/repo-policy-action@main
+        uses: qualcomm/repo-policy-action@72c9c6dc64607153cda24e9f6d3f8e115c1a4a29 # v0.1.0
         with:
           config_url: "https://raw.githubusercontent.com/qualcomm/.github/main/repolint.json"
