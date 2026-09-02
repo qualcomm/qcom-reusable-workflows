@@ -63,7 +63,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Run Full-Repo Copyright License Scan Action
-        uses: qualcomm/copyright-license-checker-action/full-scan@full_scan
+        uses: qualcomm/copyright-license-checker-action/full-scan@full_files_scan
         with:
           repo_name: ${{ github.repository }}
           # Blocking findings fail the run. This sweep covers pre-existing files nobody
