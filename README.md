@@ -121,7 +121,8 @@ The workflow:
 - **Copyright and License Check**: Verifies proper copyright and license notices in files using [copyright-license-checker-action](https://github.com/qualcomm/copyright-license-checker-action)
   - **Configuration Options:**
     - `enable-copyright-license-check`: Boolean to enable/disable the check (default: `true`)
-  - Runs only on pull requests and checks files changed in the PR
+  - In **public** repositories, checks only the files changed in a pull request (diff-based) and fails the run on blocking findings
+  - In **internal** and **private** repositories, scans every tracked source file in the repository (full-repo scan) on pull request, `push`, and `workflow_dispatch` events, and fails the run on blocking findings — including findings in files the pull request never touched
 
 - **Commit Email Check**: Validates that commit author emails follow required patterns using [commit-emails-check-action](https://github.com/qualcomm/commit-emails-check-action)
   - **Configuration Options:**
