@@ -10,7 +10,7 @@ on:
       semgrep-cli-options:
         required: false
         type: string
-        default: '--config auto'
+        default: '--config auto --config reusable-workflows/semgrep_rules/rules.yaml'
       enable-repolinter-check:
         required: false
         type: boolean
