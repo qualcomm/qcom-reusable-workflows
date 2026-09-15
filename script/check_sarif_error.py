@@ -7,10 +7,10 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 
-def effective_level(result: dict[str, Any], rules: list[dict[str, Any]]) -> str:
+def effective_level(result: Dict[str, Any], rules: List[Dict[str, Any]]) -> str:
     level = result.get("level")
     if isinstance(level, str):
         return level.lower()
@@ -27,7 +27,7 @@ def effective_level(result: dict[str, Any], rules: list[dict[str, Any]]) -> str:
     return level.lower() if isinstance(level, str) else "warning"
 
 
-def location_for(result: dict[str, Any]) -> tuple[str | None, int | None]:
+def location_for(result: Dict[str, Any]) -> Tuple[Optional[str], Optional[int]]:
     locations = result.get("locations", [])
     if not locations:
         return None, None
@@ -45,19 +45,25 @@ def annotation_value(value: str) -> str:
     return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
-def emit_error(result: dict[str, Any]) -> None:
+def emit_error(result: Dict[str, Any]) -> None:
     rule_id = str(result.get("ruleId", "unknown-rule"))
     message_data = result.get("message", {})
     message = str(message_data.get("text", "Semgrep error-severity finding"))
     path, line = location_for(result)
 
-    attributes = [f"title={annotation_value(rule_id)}"]
+    # Print human-readable format to stderr
+    location_str = ""
     if path:
-        attributes.append(f"file={annotation_value(path)}")
-    if line:
-        attributes.append(f"line={line}")
-
-    print(f"::error {','.join(attributes)}::{annotation_value(message)}")
+        location_str = f"{path}"
+        if line:
+            location_str += f":{line}"
+    else:
+        location_str = "unknown location"
+    
+    print(f"ERROR: {location_str}", file=sys.stderr)
+    print(f"  Rule: {rule_id}", file=sys.stderr)
+    print(f"  Message: {message}", file=sys.stderr)
+    print("", file=sys.stderr)
 
 
 def parse_args() -> argparse.Namespace:
@@ -92,7 +98,7 @@ def main() -> int:
         print("Error: invalid SARIF file: 'runs' must be an array", file=sys.stderr)
         return 2
 
-    error_results: list[dict[str, Any]] = []
+    error_results: List[Dict[str, Any]] = []
     for run in runs:
         if not isinstance(run, dict):
             print("Error: invalid SARIF file: each run must be an object", file=sys.stderr)
