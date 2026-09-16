@@ -51,6 +51,10 @@ runs:
           INPUTS_LAVA_URL: ${{ inputs.lava_url }}
         run: |
           set -x
+          # inherit_errexit below only has an effect when errexit is on, and a
+          # failed LAVA request has to fail the step rather than leave a
+          # half-built summary behind
+          set -eo pipefail
           # Most of the LAVA requests run in command substitutions. Make them
           # inherit errexit, so a failed request fails the step instead of
           # producing an incomplete summary.
