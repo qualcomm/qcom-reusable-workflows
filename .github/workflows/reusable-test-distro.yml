@@ -1,0 +1,350 @@
+# Reusable workflow running LAVA boot and pre-merge tests for a single distro
+# built by the calling repository.
+#
+# The calling workflow is expected to have uploaded one `build-url_<machine>_<distro>`
+# artifact per tested machine in the run identified by `build_id`.
+#
+# Test jobs are rendered by the `lava-test-plans` action and submitted by the
+# `lava-action` action, both used straight from their own repositories. Their
+# revisions are pinned by the `uses:` lines below rather than exposed as
+# inputs: `uses:` takes no expressions, so a caller cannot vary them. Callers
+# select a set of pinned revisions by pinning the ref of this workflow.
+
+name: Test Distro Reusable Workflow
+
+on:
+  workflow_call:
+    inputs:
+      build_id:
+        required: true
+        type: string
+        description: "ID of the workflow run holding the build-url_* artifacts"
+      devices:
+        required: true
+        type: string
+        description: Comma separated list of devices to be used for testing
+        # example
+        # iq-8275-evk,iq-9075-evk,qcs615-ride,rb3gen2-core-kit,qcs8300-ride-sx
+      devices_premerge:
+        required: false
+        type: string
+        description: Comma separated list of devices to be used for testing. Set when different from devices running boot test.
+      distro_name:
+        required: true
+        type: string
+        description: "Name of the distro used in the build. For meta-qcom, the following values are available: nodistro, qcom-distro"
+      distro_suffix:
+        required: false
+        type: string
+        description: "Suffix for the distro name"
+      testkit_ref:
+        type: string
+        description: "Ref in qcom-linux-testkit repository: CalVer tag or commit SHA"
+        required: true
+      project_name:
+        required: true
+        type: string
+        description: "Name of the project in lava-test-plans"
+      boot_testplan:
+        required: false
+        type: string
+        default: ""
+        description: "Test plan rendered for the boot jobs, relative to the project directory. Defaults to <distro_name>/boot"
+      premerge_testplan:
+        required: false
+        type: string
+        default: ""
+        description: "Test plan rendered for the pre-merge jobs, relative to the project directory. Defaults to <distro_name>/pre-merge"
+      image_type:
+        required: false
+        type: string
+        default: ""
+        description: "Image type used to build the image and rootfs file names. Defaults to qcom-multimedia-image for qcom-distro builds and core-image-base otherwise"
+      os_info:
+        required: false
+        type: string
+        default: "qcom-distro"
+        description: "Value of the OS_INFO variable. It selects the job metadata template and is used in the test job name"
+      variables:
+        required: false
+        type: string
+        default: ""
+        description: >
+          Additional variables in KEY=VALUE form, one per line, appended to the
+          generated variables file. They overwrite everything set by this
+          workflow. The token %MACHINE% is replaced with the name of the machine
+          the job is rendered for.
+      variables_files:
+        required: false
+        type: string
+        default: ""
+        description: "Space or newline separated list of existing variable files (ini or yaml) checked out by the caller"
+      fail_on_error:
+        required: false
+        type: boolean
+        default: true
+        description: >
+          Fail the preparation job when a build URL is missing or rendering
+          fails for any machine. Set to false to submit only the jobs that were
+          rendered successfully.
+      pr_number:
+        required: false
+        type: string
+        description: "Pull request number. Added to the LAVA job metadata for PR builds"
+      pr_url:
+        required: false
+        type: string
+        description: "Pull request URL. Added to the LAVA job metadata for PR builds"
+      lava_url:
+        required: false
+        type: string
+        default: "lava.infra.foundries.io"
+        description: "Hostname of the LAVA instance jobs are submitted to and results read from, without the scheme"
+    secrets:
+      LAVATOKEN:
+        required: true
+        description: "API token used to submit jobs to the LAVA instance"
+    outputs:
+      summary_id:
+        description: "ID of the test summary artifact"
+        value: ${{ jobs.publish-test-summary.outputs.summary_id }}
+
+jobs:
+  prepare-boot-jobs:
+    name: "Prepare boot jobs for ${{ inputs.distro_name }}"
+    runs-on: ubuntu-latest
+    outputs:
+      jobmatrix: ${{ steps.lava-test-plans.outputs.jobmatrix }}
+      artifact_id: ${{ steps.lava-test-plans.outputs.artifact_id }}
+
+    steps:
+      # The action installs and runs lava-test-plans on its own, so neither the
+      # calling repository nor lava-test-plans has to be checked out here.
+      - name: Run lava-test-plans
+        id: lava-test-plans
+        uses: qualcomm-linux/lava-test-plans@72813c68eb386a8491c6b20c70c0324f3228a51c  # first commit with github action
+        with:
+          machines: ${{ inputs.devices }}
+          distro_name: ${{ inputs.distro_name }}${{ inputs.distro_suffix }}
+          image_type: ${{ inputs.image_type }}
+          build_id: ${{ inputs.build_id }}
+          gh_token: ${{ secrets.GITHUB_TOKEN }}
+          prefix: boottest
+          project: ${{ inputs.project_name }}
+          testplan: ${{ inputs.boot_testplan != '' && inputs.boot_testplan || format('{0}/boot', inputs.distro_name) }}
+          testkit_ref: ${{ inputs.testkit_ref }}
+          os_info: ${{ inputs.os_info }}
+          pr_number: ${{ inputs.pr_number }}
+          pr_url: ${{ inputs.pr_url }}
+          variables_files: ${{ inputs.variables_files }}
+          fail_on_error: ${{ inputs.fail_on_error }}
+          # Defaults first, caller supplied variables last so they win.
+          variables: |
+            AUDIO_CLIPS_BASE_DIR=/home/AudioClips/
+            DOCKER_IMAGE_POSTPROCESS=ghcr.io/foundriesio/lava-lmp-sign:main
+            AUTH_HEADER_NAME=QLIAuthorization
+            AUTH_HEADER_TOKEN=Q_QLI_S3_TOKEN
+            ${{ inputs.variables }}
+
+      - name: Print output ID
+        env:
+          JOBMATRIX: "${{ steps.lava-test-plans.outputs.jobmatrix }}"
+          ARTIFACT_ID: "${{ steps.lava-test-plans.outputs.artifact_id }}"
+        run: |
+          echo "${ARTIFACT_ID}"
+          echo "${JOBMATRIX}"
+
+  submit-boot-job:
+    needs: prepare-boot-jobs
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    name: Boot ${{ matrix.target.name }}
+    strategy:
+      matrix: ${{ fromJson(needs.prepare-boot-jobs.outputs.jobmatrix) }}
+    steps:
+      - name: 'Download job templates'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          artifact-ids: ${{ needs.prepare-boot-jobs.outputs.artifact_id }}
+      - name: "List files"
+        shell: bash
+        run: |
+          echo $GITHUB_WORKSPACE
+          ls -R $GITHUB_WORKSPACE
+
+      - name: Submit ${{ matrix.target.name }}
+        # Set timeout to 2h. The timeout starts when the job is submitted
+        # It may spend some time in LAVA queue as there is a limited number
+        # of devices
+        timeout-minutes: 120
+        id: submit
+        uses: foundriesio/lava-action@v13
+        with:
+          lava_token: ${{ secrets.LAVATOKEN }}
+          lava_url: ${{ inputs.lava_url }}
+          job_definition: ${{ matrix.target.path }}
+          wait_for_job: true
+          fail_action_on_failure: true
+          fail_action_on_incomplete: true
+          save_result_as_artifact: true
+          save_job_details: true
+          result_file_name: "${{ matrix.target.result_file }}"
+          test_job_file_name_prefix: "${{ inputs.distro_name }}${{ inputs.distro_suffix }}-"
+      - uses: qualcomm-linux/github-action-matrix-outputs-write@v3
+        if: always()
+        id: out
+        with:
+          matrix-step-name: "${{ github.job }}-${{ inputs.distro_name }}${{ inputs.distro_suffix }}"
+          matrix-key: ${{ matrix.target.name }}-${{ inputs.distro_name }}${{ inputs.distro_suffix }}
+          artifact-name: ${{ github.job }}-${{ inputs.distro_name }}${{ inputs.distro_suffix }}-${{ matrix.target.name }}
+          outputs: |-
+            result: ${{ steps.submit.outcome }}
+
+  boot-job-result:
+    runs-on: ubuntu-latest
+    needs: [submit-boot-job]
+    outputs:
+      boot_result: "${{ steps.print-boot-result.outputs.boot_result }}"
+    steps:
+      - uses: qualcomm-linux/github-action-matrix-outputs-read@2b2498aa0fc6c565e02af0f3a3c5b7e1b6ae07f4
+        id: read
+        with:
+          matrix-step-name: "submit-boot-job-${{ inputs.distro_name }}${{ inputs.distro_suffix }}"
+          download-file-pattern: "submit-boot-job-${{ inputs.distro_name }}${{ inputs.distro_suffix }}*"
+      - id: print-boot-result
+        name: "Print boot result"
+        env:
+          OUTPUTS_RESULT: "${{ steps.read.outputs.result }}"
+        run: |
+          # collapse results of matrix of boot test jobs to a single result
+          yq --version
+
+          BOOT_RESULT="failure"
+          echo "${OUTPUTS_RESULT}" | yq
+          RESULT=$(echo "${OUTPUTS_RESULT}" | yq '.result | [.[]] | all_c(. == "success")')
+          # RESULT will be true only if there are no failures
+          if [ "$RESULT" == "true" ]; then
+            BOOT_RESULT="success"
+          fi
+          echo "boot_result=$BOOT_RESULT"
+          echo "boot_result=$BOOT_RESULT" >> "$GITHUB_OUTPUT"
+
+  prepare-premerge-jobs:
+    name: "Prepare pre-merge jobs for ${{ inputs.distro_name }}"
+    runs-on: ubuntu-latest
+    needs: boot-job-result
+    # run only if boot jobs are successful
+    if: ${{ needs.boot-job-result.outputs.boot_result == 'success' &&
+            inputs.devices_premerge != '' }}
+
+    outputs:
+      jobmatrix: ${{ steps.lava-test-plans.outputs.jobmatrix }}
+      artifact_id: ${{ steps.lava-test-plans.outputs.artifact_id }}
+
+    steps:
+      - name: Run lava-test-plans
+        id: lava-test-plans
+        uses: mwasilew/lava-test-plans@github-action
+        with:
+          machines: ${{ inputs.devices_premerge }}
+          distro_name: ${{ inputs.distro_name }}${{ inputs.distro_suffix }}
+          image_type: ${{ inputs.image_type }}
+          build_id: ${{ inputs.build_id }}
+          gh_token: ${{ secrets.GITHUB_TOKEN }}
+          prefix: premerge
+          project: ${{ inputs.project_name }}
+          testplan: ${{ inputs.premerge_testplan != '' && inputs.premerge_testplan || format('{0}/pre-merge', inputs.distro_name) }}
+          testkit_ref: ${{ inputs.testkit_ref }}
+          os_info: ${{ inputs.os_info }}
+          pr_number: ${{ inputs.pr_number }}
+          pr_url: ${{ inputs.pr_url }}
+          variables_files: ${{ inputs.variables_files }}
+          fail_on_error: ${{ inputs.fail_on_error }}
+          # Defaults first, caller supplied variables last so they win.
+          variables: |
+            AUDIO_CLIPS_BASE_DIR=/home/AudioClips/
+            DOCKER_IMAGE_POSTPROCESS=ghcr.io/foundriesio/lava-lmp-sign:main
+            AUTH_HEADER_NAME=QLIAuthorization
+            AUTH_HEADER_TOKEN=Q_QLI_S3_TOKEN
+            ${{ inputs.variables }}
+
+      - name: Print output ID
+        env:
+          JOBMATRIX: "${{ steps.lava-test-plans.outputs.jobmatrix }}"
+          ARTIFACT_ID: "${{ steps.lava-test-plans.outputs.artifact_id }}"
+        run: |
+          echo "${ARTIFACT_ID}"
+          echo "${JOBMATRIX}"
+
+  submit-premerge-job:
+    needs: prepare-premerge-jobs
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    name: Pre-merge ${{ matrix.target.name }}
+    strategy:
+      matrix: ${{ fromJson(needs.prepare-premerge-jobs.outputs.jobmatrix) }}
+    steps:
+      - name: 'Download job templates'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          artifact-ids: ${{ needs.prepare-premerge-jobs.outputs.artifact_id }}
+
+      - name: Submit ${{ matrix.target.name }}
+        # Set timeout to 2h. The timeout starts when the job is submitted
+        # It may spend some time in LAVA queue as there is a limited number
+        # of devices
+        timeout-minutes: 120
+        uses: foundriesio/lava-action@v13
+        with:
+          lava_token: ${{ secrets.LAVATOKEN }}
+          lava_url: ${{ inputs.lava_url }}
+          job_definition: ${{ matrix.target.path }}
+          wait_for_job: true
+          fail_action_on_failure: true
+          fail_action_on_incomplete: true
+          save_result_as_artifact: true
+          save_job_details: true
+          result_file_name: "${{ matrix.target.result_file }}"
+          test_job_file_name_prefix: "${{ inputs.distro_name }}${{ inputs.distro_suffix }}-"
+
+  publish-test-summary:
+    name: "Publish Summary ${{ inputs.distro_name }}${{ inputs.distro_suffix }}"
+    needs: [boot-job-result, submit-premerge-job]
+    if: |
+      always()
+      && contains(needs.*.result, 'success')
+      && !contains(needs.*.result, 'failure')
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+    outputs:
+      summary_id: ${{ steps.generate-summary.outputs.artifact_id }}
+
+    steps:
+      # The composite action lives in this repository, not in the caller's.
+      # `uses:` does not accept expressions, so it is referenced by an explicit
+      # repository path and ref rather than checked out first.
+      - name: Generate Summary
+        id: generate-summary
+        # It may be better to move the test-job-summary action to a separate repository
+        uses: qualcomm/qcom-reusable-workflows/.github/actions/test-job-summary@main
+        with:
+          build_id: ${{ github.run_id }}
+          gh_token: ${{ secrets.GITHUB_TOKEN }}
+          prefix: "${{ inputs.distro_name }}${{ inputs.distro_suffix }}-test-job*"
+          summary_file_name: "${{ inputs.distro_name }}${{ inputs.distro_suffix }}-test_job_summary"
+          summary_title: "${{ inputs.distro_name }}${{ inputs.distro_suffix }}"
+          lava_url: ${{ inputs.lava_url }}
+
+      - name: Download Summary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          artifact-ids: ${{ steps.generate-summary.outputs.artifact_id }}
+
+      - name: Publish Test Job Details
+        env:
+          INPUTS_DISTRO_NAME: "${{ inputs.distro_name }}"
+          INPUTS_DISTRO_SUFFIX: "${{ inputs.distro_suffix }}"
+        run: |
+            cat ${INPUTS_DISTRO_NAME}${INPUTS_DISTRO_SUFFIX}-test_job_summary >> $GITHUB_STEP_SUMMARY
