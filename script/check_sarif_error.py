@@ -121,6 +121,9 @@ def main() -> int:
                     file=sys.stderr,
                 )
                 return 2
+            if result.get("suppressions"):
+                # nosemgrep'd finding: don't let it fail the build.
+                continue
             if effective_level(result, rules) == "error":
                 error_results.append(result)
 
