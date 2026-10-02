@@ -10,7 +10,7 @@ on:
       semgrep-cli-options:
         required: false
         type: string
-        default: '--config auto'
+        default: '--config auto --config reusable-workflows/semgrep_rules/rules.yaml'
       enable-repolinter-check:
         required: false
         type: boolean
@@ -20,6 +20,10 @@ on:
         type: string
         default: "repolint.json"
         description: 'Path to a local repolinter ruleset override, relative to repo root'
+      enable-repo-policy-check:
+        required: false
+        type: boolean
+        default: true
       enable-copyright-license-check:
         required: false
         type: boolean
@@ -75,6 +79,13 @@ jobs:
     uses: ./.github/workflows/reusable-repolinter-check.yml
     with:
       repolint-config-path: ${{ inputs.repolint-config-path }}
+    permissions:
+      contents: read
+
+  repo-policy-check:
+    if: ${{ inputs.enable-repo-policy-check }}
+    name: Repository Policy Check
+    uses: ./.github/workflows/reusable-repo-policy-check.yml
     permissions:
       contents: read
 
