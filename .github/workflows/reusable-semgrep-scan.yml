@@ -50,6 +50,11 @@ jobs:
         run: |
           semgrep scan --sarif --output semgrep.sarif $SEMGREP_CLI_OPTIONS
       
+      - name: Drop in-source suppressed findings from SARIF
+        if: ${{ always() && hashFiles('semgrep.sarif') != '' }}
+        run: |
+          python3 reusable-workflows/script/filter_sarif_suppressed.py semgrep.sarif
+
       - name: Upload to Security Tab
         uses: github/codeql-action/upload-sarif@v4
         if: ${{ always() && github.event.repository.visibility == 'public' }}
