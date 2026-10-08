@@ -86,6 +86,8 @@ jobs:
     if: ${{ inputs.enable-repo-policy-check }}
     name: Repository Policy Check
     uses: ./.github/workflows/reusable-repo-policy-check.yml
+    with:
+      repolint-config-path: ${{ inputs.repolint-config-path }}
     permissions:
       contents: read
 

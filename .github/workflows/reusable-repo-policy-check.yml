@@ -1,6 +1,12 @@
 name: Repository Policy Check Reusable Workflow
 on:
   workflow_call:
+    inputs:
+      repolint-config-path:
+        description: "Path to a local repolinter ruleset override, relative to repo root"
+        required: false
+        type: string
+        default: "repolint.json"
 
 permissions:
   contents: read
@@ -15,6 +21,11 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Verify repolinter config file is present
+        id: check_files
+        uses: andstor/file-existence-action@v3
+        with:
+          files: "${{ inputs.repolint-config-path }}"
       - name: Run Repository Policy Check
         # This step is non-blocking (continue-on-error) while its output is
         # compared against repolinter's before it becomes the enforced gate.
@@ -22,3 +33,4 @@ jobs:
         uses: qualcomm/repo-policy-action@72c9c6dc64607153cda24e9f6d3f8e115c1a4a29 # v0.1.0
         with:
           config_url: "https://raw.githubusercontent.com/qualcomm/.github/main/repolint.json"
+          config_file: ${{ steps.check_files.outputs.files_exists == 'true' && inputs.repolint-config-path || '' }}
