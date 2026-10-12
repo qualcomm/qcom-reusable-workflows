@@ -31,5 +31,5 @@ jobs:
           MERGED=$(printf '%s\n%s' "$EXTRA_OPTIONS" "$FIXED" | jq -sc '.[0] * .[1]')
           echo "options=$MERGED" >> "$GITHUB_OUTPUT"
       - name: Run Commit Message Check Action
-        uses: qualcomm/commit-msg-check-action@f66fb9a39e883c764f9cb6b47f5aeef6b5883ba0 # v3
+        uses: qualcomm/commit-msg-check-action@79e81656d5a42017ebbf430d7d3668d5b9c962db # v3.2
         with: ${{ fromJSON(steps.prepare-options.outputs.options) }}
