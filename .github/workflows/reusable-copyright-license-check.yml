@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0    # Full history so we can diff properly.
                             # On pull_request events, actions/checkout fetches
@@ -44,7 +44,7 @@ jobs:
           head -n 100 pr.patch
 
       - name: Run Copyright License Check Action
-        uses: qualcomm/copyright-license-checker-action@ad0c1d22c71d85972d26ec2c72074faaad9bb0df
+        uses: qualcomm/copyright-license-checker-action@ad0c1d22c71d85972d26ec2c72074faaad9bb0df # v1.2.3
         with:
           patch_file: pr.patch
           repo_name: ${{ github.repository }}
