@@ -115,7 +115,7 @@ jobs:
   armor-checkers:
     if: ${{ inputs.enable-armor-checkers }}
     name: ARMOR Compatibility Checkers
-    uses: qualcomm/armor-checkers/.github/workflows/armor-checker.yml@v1
+    uses: qualcomm/armor-checkers/.github/workflows/armor-checker.yml@5eaf3cb741f0dec3c12cdd7aaf933653ace78691 # v1.1.3
     with:
       armor-checker-options: ${{ inputs.armor-checker-options }}
     permissions:

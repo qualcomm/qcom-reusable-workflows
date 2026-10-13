@@ -12,8 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Run Commit Emails Check Action
-        uses: qualcomm/commit-emails-check-action@v1.0.0
+        uses: qualcomm/commit-emails-check-action@46c3958ed716495bf05e03c6d1a6760969b948ff # v1.0.0

@@ -30,14 +30,14 @@ jobs:
       
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Checkout reusable workflow repo
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: qualcomm/qcom-reusable-workflows
           path: reusable-workflows
@@ -51,7 +51,7 @@ jobs:
           semgrep scan --sarif --output semgrep.sarif $SEMGREP_CLI_OPTIONS
       
       - name: Upload to Security Tab
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         if: ${{ always() && github.event.repository.visibility == 'public' }}
         with:
           sarif_file: semgrep.sarif
