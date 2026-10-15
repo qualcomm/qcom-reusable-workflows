@@ -100,6 +100,20 @@ on:
         type: string
         default: "lava.infra.foundries.io"
         description: "Hostname of the LAVA instance jobs are submitted to and results read from, without the scheme"
+      known_failures_file:
+        required: false
+        type: string
+        default: ""
+        description: >
+          Known failures list applied to the summary, relative to the caller's
+          workspace. Empty disables the mechanism.
+      kernel:
+        required: false
+        type: string
+        default: ""
+        description: >
+          Kernel flavour under test. Known failures entries with a "kernels"
+          filter only apply to the flavours they list.
     secrets:
       LAVATOKEN:
         required: true
@@ -312,12 +326,21 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read # download the test job results
+      contents: read # actions/checkout
       checks: write
       pull-requests: write
     outputs:
       summary_id: ${{ steps.generate-summary.outputs.artifact_id }}
 
     steps:
+      # The known failures list is a file in the caller's repository, so it
+      # has to be checked out.
+      - name: Clone repository
+        if: ${{ inputs.known_failures_file != '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       # The composite action lives in this repository, not in the caller's.
       # `uses:` does not accept expressions, so it is referenced by an explicit
       # repository path and ref rather than checked out first.
@@ -332,6 +355,8 @@ jobs:
           summary_file_name: "${{ inputs.distro_name }}${{ inputs.distro_suffix }}-test_job_summary"
           summary_title: "${{ inputs.distro_name }}${{ inputs.distro_suffix }}"
           lava_url: ${{ inputs.lava_url }}
+          known_failures_file: ${{ inputs.known_failures_file }}
+          kernel: ${{ inputs.kernel }}
 
       - name: Download Summary
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2

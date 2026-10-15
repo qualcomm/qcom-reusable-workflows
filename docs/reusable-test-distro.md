@@ -43,6 +43,8 @@ jobs:
 | `pr_number` | no | Pull request number, added to the LAVA job metadata |
 | `pr_url` | no | Pull request URL, added to the LAVA job metadata |
 | `lava_url` | no | Hostname of the LAVA instance, without the scheme (default: `lava.infra.foundries.io`) |
+| `known_failures_file` | no | Known failures list applied to the summary, relative to the caller's workspace (see [`test-job-summary`](../.github/actions/test-job-summary)). Empty disables it |
+| `kernel` | no | Kernel flavour under test, matched against the `kernels` filter of known failures entries |
 
 **Secrets:**
 
