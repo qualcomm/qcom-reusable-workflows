@@ -10,13 +10,13 @@ The `qcom-reusable-workflows` repository provides a collection of reusable GitHu
 
 The main orchestrator workflow is `reusable-qcom-preflight-checks-orchestrator.yml`, which coordinates the execution of several specialized workflows:
 
-1. **Semgrep Scan** - Static code analysis for security vulnerabilities
-2. **Dependency Review** - Checks for vulnerabilities in dependencies
-3. **Repolinter Check** - Ensures repository follows best practices
-4. **Copyright and License Check** - Verifies proper copyright and license notices
-5. **Commit Email Check** - Validates commit author emails
-6. **Commit Message Check** - Ensures commit messages follow standards (optional)
-7. **ARMOR Compatibility Checkers** - Ensures source code follows API and ABI backward compatibility (optional)
+1. **[Semgrep Scan](https://github.com/semgrep/semgrep)** - Static code analysis for security vulnerabilities
+2. **[Dependency Review](https://github.com/actions/dependency-review-action)** - Checks for vulnerabilities in dependencies
+3. **[Repolinter Check](https://github.com/todogroup/repolinter-action)** - Ensures repository follows best practices
+4. **[Copyright and License Check](https://github.com/qualcomm/copyright-license-checker-action)** - Verifies proper copyright and license notices
+5. **[Commit Email Check](https://github.com/qualcomm/commit-emails-check-action)** - Validates commit author emails
+6. **[Commit Message Check](https://github.com/qualcomm/commit-msg-check-action)** - Ensures commit messages follow standards (optional)
+7. **[ARMOR Compatibility Checkers](https://github.com/qualcomm/armor-checkers)** - Ensures source code follows API and ABI backward compatibility (optional)
 
 
 ## Usage
@@ -53,7 +53,7 @@ jobs:
 
 ### Semgrep Scan
 
-[Semgrep](https://semgrep.dev/) is a lightweight static analysis tool for finding bugs and enforcing code standards.
+[Semgrep](https://semgrep.dev/) is a lightweight static analysis tool for finding bugs and enforcing code standards. The scan runs [semgrep](https://github.com/semgrep/semgrep) from its official container image.
 
 **Configuration Options:**
 - `enable-semgrep-scan`: Boolean to enable/disable the scan (default: `true`)
@@ -94,7 +94,7 @@ For more information on ignoring files and folders, see the [Semgrep documentati
 
 ### Dependency Review
 
-Dependency Review checks for vulnerabilities in your project dependencies when they change in pull requests.
+Dependency Review checks for vulnerabilities in your project dependencies when they change in pull requests using [dependency-review-action](https://github.com/actions/dependency-review-action).
 
 **Configuration Options:**
 - `enable-dependency-review`: Boolean to enable/disable the review (default: `true`)
@@ -106,7 +106,7 @@ The workflow automatically:
 
 ### Repolinter Check
 
-[Repolinter](https://github.com/todogroup/repolinter) is a tool that checks repositories for compliance with open source best practices.
+[Repolinter](https://github.com/todogroup/repolinter) is a tool that checks repositories for compliance with open source best practices. It is run using [repolinter-action](https://github.com/todogroup/repolinter-action).
 
 **Configuration Options:**
 - `enable-repolinter-check`: Boolean to enable/disable the check (default: `true`)
@@ -140,7 +140,7 @@ The workflow:
 - **ARMOR Compatibility Checkers**: Ensures source-level (API) and binary-level (ABI) backward compatibility of source code using [armor-checkers](https://github.com/qualcomm/armor-checkers)
   - **Configuration Options:**
     - `enable-armor-checkers`: Boolean to enable/disable the check (default: `false`)
-    - `armor-checker-options`: String containing JSON object with options (default: empty string). To view all available options, please see the link at:https://github.com/qualcomm/armor-checkers
+    - `armor-checker-options`: String containing JSON object with options (default: empty string). To view all available options, please see [armor-checkers](https://github.com/qualcomm/armor-checkers)
   - Runs on both push and pull request events
 
 For detailed configuration options and default values for each action, please refer to their respective GitHub repositories.
