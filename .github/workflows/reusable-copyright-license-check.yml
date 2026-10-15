@@ -43,8 +43,16 @@ jobs:
           git diff "${BASE}...${HEAD}" > pr.patch
           head -n 100 pr.patch
 
+      - name: Constrain pluggy for scancode
+        # pluggy 1.7.0 breaks plugincode/scancode-toolkit 32.5.0
+        # ("did not find any 'pre_scan' hooks"). Drop once upstream
+        # copyright-license-checker-action pins it; see issue #71.
+        run: echo 'pluggy<1.7' > "${RUNNER_TEMP}/pip-constraints.txt"
+
       - name: Run Copyright License Check Action
         uses: qualcomm/copyright-license-checker-action@b51916a556659277cbe1cedd8252daf04875ec6d # v2.0.0
+        env:
+          PIP_CONSTRAINT: ${{ runner.temp }}/pip-constraints.txt
         with:
           patch_file: pr.patch
           repo_name: ${{ github.repository }}
