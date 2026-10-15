@@ -2,7 +2,8 @@
 # built by the calling repository.
 #
 # The calling workflow is expected to have uploaded one `build-url_<machine>_<distro>`
-# artifact per tested machine in the run identified by `build_id`.
+# artifact per tested machine in the run identified by `build_id`, unless it
+# passes the base URL of the build for every machine in `url`.
 #
 # Test jobs are rendered by the `lava-test-plans` action and submitted by the
 # `lava-action` action, both used straight from their own repositories. Their
@@ -18,7 +19,14 @@ on:
       build_id:
         required: true
         type: string
-        description: "ID of the workflow run holding the build-url_* artifacts"
+        description: "ID of the workflow run that built the images, holding the build-url_* artifacts unless url is set"
+      url:
+        required: false
+        type: string
+        default: ""
+        description: >
+          Base URL the build was published to, used for every machine instead
+          of the build-url_* artifacts of build_id.
       devices:
         required: true
         type: string
@@ -148,7 +156,10 @@ jobs:
           machines: ${{ inputs.devices }}
           distro_name: ${{ inputs.distro_name }}${{ inputs.distro_suffix }}
           image_type: ${{ inputs.image_type }}
-          build_id: ${{ inputs.build_id }}
+          # build_id takes precedence over build_url in the action, so only
+          # pass it when the URL is to be read from the build-url_* artifacts.
+          build_id: ${{ inputs.url == '' && inputs.build_id || '' }}
+          build_url: ${{ inputs.url }}
           gh_token: ${{ secrets.GITHUB_TOKEN }}
           prefix: boottest
           project: ${{ inputs.project_name }}
@@ -263,7 +274,10 @@ jobs:
           machines: ${{ inputs.devices_premerge }}
           distro_name: ${{ inputs.distro_name }}${{ inputs.distro_suffix }}
           image_type: ${{ inputs.image_type }}
-          build_id: ${{ inputs.build_id }}
+          # build_id takes precedence over build_url in the action, so only
+          # pass it when the URL is to be read from the build-url_* artifacts.
+          build_id: ${{ inputs.url == '' && inputs.build_id || '' }}
+          build_url: ${{ inputs.url }}
           gh_token: ${{ secrets.GITHUB_TOKEN }}
           prefix: premerge
           project: ${{ inputs.project_name }}

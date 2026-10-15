@@ -7,7 +7,8 @@ LAVA, collapses the boot results into a single pass/fail, and publishes a job su
 
 The workflow expects the run identified by `build_id` to contain one
 `build-url_<machine>_<distro>` artifact per tested machine, holding the base URL of the
-published build.
+published build. Callers that publish every machine under the same base URL can pass
+it in `url` instead.
 
 ```yml
 jobs:
@@ -27,7 +28,8 @@ jobs:
 
 | Input | Required | Description |
 | ---- | ---- | ---- |
-| `build_id` | yes | ID of the workflow run holding the `build-url_*` artifacts |
+| `build_id` | yes | ID of the workflow run that built the images, holding the `build-url_*` artifacts unless `url` is set |
+| `url` | no | Base URL of the build, used for every machine instead of the `build-url_*` artifacts |
 | `devices` | yes | Comma separated list of devices to run boot tests on |
 | `devices_premerge` | no | Comma separated list of devices to run pre-merge tests on. Pre-merge tests are skipped when empty |
 | `distro_name` | yes | Name of the distro used in the build, e.g. `nodistro` or `qcom-distro` |
