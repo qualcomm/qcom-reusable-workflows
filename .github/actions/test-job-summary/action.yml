@@ -203,11 +203,20 @@ runs:
                           SUITE_ID=$(echo "$SUITE" | jq -r ".id")
                           SUITE_TESTS=$(lava_api "jobs/$JOB_ID/suites/$SUITE_ID/tests/")
                           if [ "$SUITE_NAME" != "lava" ]; then
+                              # A suite is named "<index>_<test>" and holds the
+                              # one test case "<test>". Report it under the suite
+                              # name, whose index gives the order the tests ran
+                              # in, and keep the test case name for matching
+                              # known failures. A test case named otherwise gets
+                              # a row of its own.
                               # resource_uri points to the REST API, link to the test case page instead
-                              echo "$SUITE_TESTS" | jq --arg base "${LAVA_BASE}" '.results[] | {(.name): {result: .result, url: "\($base)/results/testcase/\(.id)"}} | to_entries | .[]'
+                              echo "$SUITE_TESTS" | jq --arg base "${LAVA_BASE}" --arg suite "${SUITE_NAME}" '
+                                .results[]
+                                | (if ($suite | sub("^[0-9]+_"; "")) == .name then $suite else "\($suite)/\(.name)" end) as $row
+                                | {key: $row, value: {test: .name, result: .result, url: "\($base)/results/testcase/\(.id)"}}'
                           fi
                       fi
-                  done | jq -s -c --sort-keys 'from_entries')
+                  done | jq -s -c 'from_entries')
               fi
               echo "{\"key\": \"$JOB_DEVICE_TYPE\", \"value\": $TEST_RESULTS}" | jq
           # combine entries from boot jobs and pre-merge jobs
@@ -251,13 +260,15 @@ runs:
           # failure and counted as a pass. A test that passes while it is on
           # the list is reported as an unexpected pass and counted as a
           # failure, so that stale entries get noticed and removed. The comment
-          # of the entry is carried over so it can be reported too.
+          # of the entry is carried over so it can be reported too. The list
+          # names the test case, not the suite, as the index in the suite name
+          # changes whenever a test is added to or removed from the plan.
           INPUT=$(echo "$INPUT" | jq -c --argjson known "${KNOWN_FAILURES}" '
             with_entries(
               # a device specific entry overrides the one listed for all devices
               (($known["*"] // {}) + ($known[.key] // {})) as $known_tests
               | .value |= with_entries(
-                  .key as $test
+                  (.value.test // .key) as $test
                   | ($known_tests | has($test)) as $is_known
                   | .value.status = (
                       if .value.result == "fail" and $is_known then "known failure"
@@ -268,14 +279,18 @@ runs:
             )')
           echo "$INPUT"
 
-          # Boards across the top and tests down the side, both alphabetical,
-          # except that boot always comes first: it is the one result every job
-          # has, and the one that explains all the others when it fails.
+          # Boards across the top, alphabetical, and tests down the side in the
+          # order they ran in, which is the index their suite name starts with.
+          # Boot comes first: it is the one result every job has, and the one
+          # that explains all the others when it fails. A test without an index
+          # goes after the others, alphabetical.
           DEVICES=$(echo "$INPUT" | jq -r '[keys[]] | sort_by(ascii_downcase) | .[]')
 
           RESULTS=$(echo "$INPUT" | jq -r '
             [.[] | keys[]?] | unique
-            | map(select(. == "boot")) + (map(select(. != "boot")) | sort_by(ascii_downcase))
+            | map(select(. == "boot"))
+              + (map(select(. != "boot"))
+                 | sort_by((capture("^(?<n>[0-9]+)_").n | tonumber) // infinite, ascii_downcase))
             | .[]')
 
           # Print collapsible box
