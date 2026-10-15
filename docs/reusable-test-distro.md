@@ -44,6 +44,7 @@ jobs:
 | `variables` | no | Extra `KEY=VALUE` lines appended to the generated variables file. `%MACHINE%` is replaced with the machine name. Must not contain a section header |
 | `extra_metadata` | no | Extra `key = "value"` lines recorded in the LAVA job metadata, see [Job metadata](#job-metadata). `%MACHINE%` is replaced with the machine name |
 | `variables_files` | no | Space or newline separated list of variable files (ini or yaml) checked out by the caller |
+| `fail_on_error` | no | Fail the preparation job when a build URL is missing or rendering fails for any machine. Set to `false` to submit only the jobs that rendered (default: `true`) |
 | `pr_number` | no | Pull request number, added to the LAVA job metadata |
 | `pr_url` | no | Pull request URL, added to the LAVA job metadata |
 | `lava_url` | no | Hostname of the LAVA instance, without the scheme (default: `lava.infra.foundries.io`) |
