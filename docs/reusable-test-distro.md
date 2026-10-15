@@ -49,6 +49,20 @@ jobs:
 - `LAVATOKEN` (required): API token used to submit jobs to the LAVA instance. Pass it
   explicitly or with `secrets: inherit`.
 
+**Permissions:**
+
+The workflow grants no token permissions by default and each job asks only for
+what it needs. A reusable workflow can't be granted more than its caller has, so
+the calling job has to grant at least:
+
+```yml
+    permissions:
+      actions: read
+      checks: write
+      contents: read
+      pull-requests: write
+```
+
 **Outputs:**
 
 - `summary_id`: ID of the uploaded test summary artifact.

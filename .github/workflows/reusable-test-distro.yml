@@ -109,10 +109,17 @@ on:
         description: "ID of the test summary artifact"
         value: ${{ jobs.publish-test-summary.outputs.summary_id }}
 
+# Grant nothing by default; every job below declares the scopes it needs.
+# These are also capped by the calling job's permissions: block, so callers
+# have to grant at least as much.
+permissions: {}
+
 jobs:
   prepare-boot-jobs:
     name: "Prepare boot jobs for ${{ inputs.distro_name }}"
     runs-on: ubuntu-latest
+    permissions:
+      actions: read # download the build-url_* artifacts of build_id
     outputs:
       jobmatrix: ${{ steps.lava-test-plans.outputs.jobmatrix }}
       artifact_id: ${{ steps.lava-test-plans.outputs.artifact_id }}
@@ -159,6 +166,8 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     name: Boot ${{ matrix.target.name }}
+    permissions:
+      contents: read
     strategy:
       matrix: ${{ fromJson(needs.prepare-boot-jobs.outputs.jobmatrix) }}
     steps:
@@ -203,6 +212,8 @@ jobs:
   boot-job-result:
     runs-on: ubuntu-latest
     needs: [submit-boot-job]
+    permissions:
+      contents: read
     outputs:
       boot_result: "${{ steps.print-boot-result.outputs.boot_result }}"
     steps:
@@ -236,7 +247,8 @@ jobs:
     # run only if boot jobs are successful
     if: ${{ needs.boot-job-result.outputs.boot_result == 'success' &&
             inputs.devices_premerge != '' }}
-
+    permissions:
+      actions: read # download the build-url_* artifacts of build_id
     outputs:
       jobmatrix: ${{ steps.lava-test-plans.outputs.jobmatrix }}
       artifact_id: ${{ steps.lava-test-plans.outputs.artifact_id }}
@@ -281,6 +293,8 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     name: Pre-merge ${{ matrix.target.name }}
+    permissions:
+      contents: read
     strategy:
       matrix: ${{ fromJson(needs.prepare-premerge-jobs.outputs.jobmatrix) }}
     steps:
@@ -316,6 +330,7 @@ jobs:
       && !contains(needs.*.result, 'failure')
     runs-on: ubuntu-latest
     permissions:
+      actions: read # download the test job results
       checks: write
       pull-requests: write
     outputs:
