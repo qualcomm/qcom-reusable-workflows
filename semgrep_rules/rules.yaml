@@ -1256,118 +1256,120 @@ rules:
           - focus-metavariable: $PTR
 
   ###########################################################################
-  # Non-void function has a bare return.
-  ###########################################################################
-  - id: cxx.funcret.gen.non-void-function-bare-return
-    languages:
-      - c
-      - cpp
-    severity: ERROR
-    message: >-
-      Non-void function '$FUNC' uses 'return;' without returning a value. Return
-      an expression compatible with '$RET' or change the function return type to
-      void.
-    metadata:
-      cwe:
-        - "CWE-758: Reliance on Undefined, Unspecified, or Implementation-Defined Behavior"
-        - "CWE-457: Use of Uninitialized Variable"
-      bug_type: "bare return in non-void function"
-      checker: "FUNCRET.GEN"
-      confidence: HIGH
-      impact: "Caller may receive an indeterminate return value or compilation may fail."
-      likelihood: HIGH
-      precision: HIGH
-      category: correctness
-      subcategory:
-        - vuln
-        - audit
-      technology:
-        - c
-        - cpp
-    patterns:
-      - pattern-either:
-          - pattern: |
-              $RET $FUNC(...) {
-                ...
-                return;
-                ...
-              }
-          - pattern: |
-              $RET $CLASS::$FUNC(...) {
-                ...
-                return;
-                ...
-              }
-          - pattern: |
-              $RET $FUNC(...) const {
-                ...
-                return;
-                ...
-              }
-          - pattern: |
-              $RET $CLASS::$FUNC(...) const {
-                ...
-                return;
-                ...
-              }
-          - pattern: |
-              auto $FUNC(...) -> $RET {
-                ...
-                return;
-                ...
-              }
-          - pattern: |
-              auto $CLASS::$FUNC(...) -> $RET {
-                ...
-                return;
-                ...
-              }
-          - pattern: |
-              auto $FUNC(...) const -> $RET {
-                ...
-                return;
-                ...
-              }
-          - pattern: |
-              auto $CLASS::$FUNC(...) const -> $RET {
-                ...
-                return;
-                ...
-              }
+  # Temporarily disabled: false positives for returns inside C++ lambdas.
+#  # Non-void function has a bare return.
+#  ###########################################################################
+#  - id: cxx.funcret.gen.non-void-function-bare-return
+#    languages:
+#      - c
+#      - cpp
+#    severity: ERROR
+#    message: >-
+#      Non-void function '$FUNC' uses 'return;' without returning a value. Return
+#      an expression compatible with '$RET' or change the function return type to
+#      void.
+#    metadata:
+#      cwe:
+#        - "CWE-758: Reliance on Undefined, Unspecified, or Implementation-Defined Behavior"
+#        - "CWE-457: Use of Uninitialized Variable"
+#      bug_type: "bare return in non-void function"
+#      checker: "FUNCRET.GEN"
+#      confidence: HIGH
+#      impact: "Caller may receive an indeterminate return value or compilation may fail."
+#      likelihood: HIGH
+#      precision: HIGH
+#      category: correctness
+#      subcategory:
+#        - vuln
+#        - audit
+#      technology:
+#        - c
+#        - cpp
+#    patterns:
+#      - pattern-either:
+#          - pattern: |
+#              $RET $FUNC(...) {
+#                ...
+#                return;
+#                ...
+#              }
+#          - pattern: |
+#              $RET $CLASS::$FUNC(...) {
+#                ...
+#                return;
+#                ...
+#              }
+#          - pattern: |
+#              $RET $FUNC(...) const {
+#                ...
+#                return;
+#                ...
+#              }
+#          - pattern: |
+#              $RET $CLASS::$FUNC(...) const {
+#                ...
+#                return;
+#                ...
+#              }
+#          - pattern: |
+#              auto $FUNC(...) -> $RET {
+#                ...
+#                return;
+#                ...
+#              }
+#          - pattern: |
+#              auto $CLASS::$FUNC(...) -> $RET {
+#                ...
+#                return;
+#                ...
+#              }
+#          - pattern: |
+#              auto $FUNC(...) const -> $RET {
+#                ...
+#                return;
+#                ...
+#              }
+#          - pattern: |
+#              auto $CLASS::$FUNC(...) const -> $RET {
+#                ...
+#                return;
+#                ...
+#              }
+#
+#      - metavariable-regex:
+#          metavariable: $RET
+#          regex: '^(?!(?:(?:static|inline|extern|constexpr|virtual|friend|const|volatile|register)\s+)*void\s*$)(?!auto\s*$).+'
+#
+#      - pattern-not: |
+#          int main(...) {
+#            ...
+#          }
+#      - pattern-not: |
+#          auto main(...) -> int {
+#            ...
+#          }
+#
+#      - pattern-not: |
+#          [[noreturn]] $RET $FUNC(...) {
+#            ...
+#          }
+#      - pattern-not: |
+#          [[noreturn]] $RET $CLASS::$FUNC(...) {
+#            ...
+#          }
+#      - pattern-not: |
+#          __attribute__((noreturn)) $RET $FUNC(...) {
+#            ...
+#          }
+#      - pattern-not: |
+#          __attribute__((noreturn)) $RET $CLASS::$FUNC(...) {
+#            ...
+#          }
+#
+#      - focus-metavariable: $FUNC
+#
+#  ###########################################################################
 
-      - metavariable-regex:
-          metavariable: $RET
-          regex: '^(?!(?:(?:static|inline|extern|constexpr|virtual|friend|const|volatile|register)\s+)*void\s*$)(?!auto\s*$).+'
-
-      - pattern-not: |
-          int main(...) {
-            ...
-          }
-      - pattern-not: |
-          auto main(...) -> int {
-            ...
-          }
-
-      - pattern-not: |
-          [[noreturn]] $RET $FUNC(...) {
-            ...
-          }
-      - pattern-not: |
-          [[noreturn]] $RET $CLASS::$FUNC(...) {
-            ...
-          }
-      - pattern-not: |
-          __attribute__((noreturn)) $RET $FUNC(...) {
-            ...
-          }
-      - pattern-not: |
-          __attribute__((noreturn)) $RET $CLASS::$FUNC(...) {
-            ...
-          }
-
-      - focus-metavariable: $FUNC
-
-  ###########################################################################
   # Medium-confidence path-sensitive approximation.
   ###########################################################################
   - id: cxx.funcret.gen.non-void-function-conditional-return-missing-fallback
@@ -1645,182 +1647,184 @@ rules:
       - focus-metavariable: $FUNC
 
   ###########################################################################
-  # FUNCRET.GEN
-  # Non-void function does not return a value.
-  ###########################################################################
-  - id: cxx.funcret.gen.non-void-function-no-return
-    languages:
-      - c
-      - cpp
-    severity: ERROR
-    message: >-
-      Non-void function '$FUNC' has no return statement. Falling off the end of
-      a non-void function can leave the returned value indeterminate and causes
-      undefined behavior. Return a value on all paths or change the function
-      return type to void.
-    metadata:
-      cwe:
-        - "CWE-758: Reliance on Undefined, Unspecified, or Implementation-Defined Behavior"
-        - "CWE-457: Use of Uninitialized Variable"
-      bug_type: "missing return value in non-void function"
-      checker: "FUNCRET.GEN"
-      confidence: HIGH
-      impact: "Caller may receive an indeterminate return value; program behavior is undefined."
-      likelihood: HIGH
-      precision: HIGH
-      category: correctness
-      subcategory:
-        - vuln
-        - audit
-      technology:
-        - c
-        - cpp
-    patterns:
-      - pattern-either:
-          - pattern: |
-              $RET $FUNC(...) {
-                ...
-              }
-          - pattern: |
-              $RET $CLASS::$FUNC(...) {
-                ...
-              }
-          - pattern: |
-              $RET $FUNC(...) const {
-                ...
-              }
-          - pattern: |
-              $RET $CLASS::$FUNC(...) const {
-                ...
-              }
-          - pattern: |
-              auto $FUNC(...) -> $RET {
-                ...
-              }
-          - pattern: |
-              auto $CLASS::$FUNC(...) -> $RET {
-                ...
-              }
-          - pattern: |
-              auto $FUNC(...) const -> $RET {
-                ...
-              }
-          - pattern: |
-              auto $CLASS::$FUNC(...) const -> $RET {
-                ...
-              }
+  # Temporarily disabled: false positives for C++ structs and classes.
+#  # FUNCRET.GEN
+#  # Non-void function does not return a value.
+#  ###########################################################################
+#  - id: cxx.funcret.gen.non-void-function-no-return
+#    languages:
+#      - c
+#      - cpp
+#    severity: ERROR
+#    message: >-
+#      Non-void function '$FUNC' has no return statement. Falling off the end of
+#      a non-void function can leave the returned value indeterminate and causes
+#      undefined behavior. Return a value on all paths or change the function
+#      return type to void.
+#    metadata:
+#      cwe:
+#        - "CWE-758: Reliance on Undefined, Unspecified, or Implementation-Defined Behavior"
+#        - "CWE-457: Use of Uninitialized Variable"
+#      bug_type: "missing return value in non-void function"
+#      checker: "FUNCRET.GEN"
+#      confidence: HIGH
+#      impact: "Caller may receive an indeterminate return value; program behavior is undefined."
+#      likelihood: HIGH
+#      precision: HIGH
+#      category: correctness
+#      subcategory:
+#        - vuln
+#        - audit
+#      technology:
+#        - c
+#        - cpp
+#    patterns:
+#      - pattern-either:
+#          - pattern: |
+#              $RET $FUNC(...) {
+#                ...
+#              }
+#          - pattern: |
+#              $RET $CLASS::$FUNC(...) {
+#                ...
+#              }
+#          - pattern: |
+#              $RET $FUNC(...) const {
+#                ...
+#              }
+#          - pattern: |
+#              $RET $CLASS::$FUNC(...) const {
+#                ...
+#              }
+#          - pattern: |
+#              auto $FUNC(...) -> $RET {
+#                ...
+#              }
+#          - pattern: |
+#              auto $CLASS::$FUNC(...) -> $RET {
+#                ...
+#              }
+#          - pattern: |
+#              auto $FUNC(...) const -> $RET {
+#                ...
+#              }
+#          - pattern: |
+#              auto $CLASS::$FUNC(...) const -> $RET {
+#                ...
+#              }
+#
+#      - metavariable-regex:
+#          metavariable: $RET
+#          regex: '^(?!(?:(?:static|inline|extern|constexpr|virtual|friend|const|volatile|register)\s+)*void\s*$)(?!auto\s*$).+'
+#
+#      - pattern-not: |
+#          int main(...) {
+#            ...
+#          }
+#      - pattern-not: |
+#          auto main(...) -> int {
+#            ...
+#          }
+#
+#      - pattern-not: |
+#          $RET $FUNC(...) {
+#            ...
+#            return ...;
+#            ...
+#          }
+#      - pattern-not: |
+#          $RET $CLASS::$FUNC(...) {
+#            ...
+#            return ...;
+#            ...
+#          }
+#      - pattern-not: |
+#          $RET $FUNC(...) const {
+#            ...
+#            return ...;
+#            ...
+#          }
+#      - pattern-not: |
+#          $RET $CLASS::$FUNC(...) const {
+#            ...
+#            return ...;
+#            ...
+#          }
+#      - pattern-not: |
+#          auto $FUNC(...) -> $RET {
+#            ...
+#            return ...;
+#            ...
+#          }
+#      - pattern-not: |
+#          auto $CLASS::$FUNC(...) -> $RET {
+#            ...
+#            return ...;
+#            ...
+#          }
+#      - pattern-not: |
+#          auto $FUNC(...) const -> $RET {
+#            ...
+#            return ...;
+#            ...
+#          }
+#      - pattern-not: |
+#          auto $CLASS::$FUNC(...) const -> $RET {
+#            ...
+#            return ...;
+#            ...
+#          }
+#
+#      - pattern-not: |
+#          [[noreturn]] $RET $FUNC(...) {
+#            ...
+#          }
+#      - pattern-not: |
+#          [[noreturn]] $RET $CLASS::$FUNC(...) {
+#            ...
+#          }
+#      - pattern-not: |
+#          __attribute__((noreturn)) $RET $FUNC(...) {
+#            ...
+#          }
+#      - pattern-not: |
+#          __attribute__((noreturn)) $RET $CLASS::$FUNC(...) {
+#            ...
+#          }
+#
+#      - pattern-not: |
+#          $RET $FUNC(...) {
+#            throw $EXCEPTION;
+#          }
+#      - pattern-not: |
+#          $RET $FUNC(...) {
+#            abort();
+#          }
+#      - pattern-not: |
+#          $RET $FUNC(...) {
+#            std::abort();
+#          }
+#      - pattern-not: |
+#          $RET $FUNC(...) {
+#            exit(...);
+#          }
+#      - pattern-not: |
+#          $RET $FUNC(...) {
+#            std::exit(...);
+#          }
+#      - pattern-not: |
+#          $RET $FUNC(...) {
+#            _Exit(...);
+#          }
+#      - pattern-not: |
+#          $RET $FUNC(...) {
+#            __builtin_unreachable();
+#          }
+#
+#      - focus-metavariable: $FUNC
+#
+#  ###########################################################################
 
-      - metavariable-regex:
-          metavariable: $RET
-          regex: '^(?!(?:(?:static|inline|extern|constexpr|virtual|friend|const|volatile|register)\s+)*void\s*$)(?!auto\s*$).+'
-
-      - pattern-not: |
-          int main(...) {
-            ...
-          }
-      - pattern-not: |
-          auto main(...) -> int {
-            ...
-          }
-
-      - pattern-not: |
-          $RET $FUNC(...) {
-            ...
-            return ...;
-            ...
-          }
-      - pattern-not: |
-          $RET $CLASS::$FUNC(...) {
-            ...
-            return ...;
-            ...
-          }
-      - pattern-not: |
-          $RET $FUNC(...) const {
-            ...
-            return ...;
-            ...
-          }
-      - pattern-not: |
-          $RET $CLASS::$FUNC(...) const {
-            ...
-            return ...;
-            ...
-          }
-      - pattern-not: |
-          auto $FUNC(...) -> $RET {
-            ...
-            return ...;
-            ...
-          }
-      - pattern-not: |
-          auto $CLASS::$FUNC(...) -> $RET {
-            ...
-            return ...;
-            ...
-          }
-      - pattern-not: |
-          auto $FUNC(...) const -> $RET {
-            ...
-            return ...;
-            ...
-          }
-      - pattern-not: |
-          auto $CLASS::$FUNC(...) const -> $RET {
-            ...
-            return ...;
-            ...
-          }
-
-      - pattern-not: |
-          [[noreturn]] $RET $FUNC(...) {
-            ...
-          }
-      - pattern-not: |
-          [[noreturn]] $RET $CLASS::$FUNC(...) {
-            ...
-          }
-      - pattern-not: |
-          __attribute__((noreturn)) $RET $FUNC(...) {
-            ...
-          }
-      - pattern-not: |
-          __attribute__((noreturn)) $RET $CLASS::$FUNC(...) {
-            ...
-          }
-
-      - pattern-not: |
-          $RET $FUNC(...) {
-            throw $EXCEPTION;
-          }
-      - pattern-not: |
-          $RET $FUNC(...) {
-            abort();
-          }
-      - pattern-not: |
-          $RET $FUNC(...) {
-            std::abort();
-          }
-      - pattern-not: |
-          $RET $FUNC(...) {
-            exit(...);
-          }
-      - pattern-not: |
-          $RET $FUNC(...) {
-            std::exit(...);
-          }
-      - pattern-not: |
-          $RET $FUNC(...) {
-            _Exit(...);
-          }
-      - pattern-not: |
-          $RET $FUNC(...) {
-            __builtin_unreachable();
-          }
-
-      - focus-metavariable: $FUNC
-
-  ###########################################################################
   # LOCRET.ARG - address of local written through pointer argument.
   ###########################################################################
   - id: cxx.locret.arg.address-of-local-written-through-pointer-argument
