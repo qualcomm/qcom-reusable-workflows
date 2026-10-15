@@ -153,14 +153,6 @@ jobs:
             AUTH_HEADER_TOKEN=Q_QLI_S3_TOKEN
             ${{ inputs.variables }}
 
-      - name: Print output ID
-        env:
-          JOBMATRIX: "${{ steps.lava-test-plans.outputs.jobmatrix }}"
-          ARTIFACT_ID: "${{ steps.lava-test-plans.outputs.artifact_id }}"
-        run: |
-          echo "${ARTIFACT_ID}"
-          echo "${JOBMATRIX}"
-
   submit-boot-job:
     needs: prepare-boot-jobs
     runs-on: ubuntu-latest
@@ -176,11 +168,6 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.prepare-boot-jobs.outputs.artifact_id }}
-      - name: "List files"
-        shell: bash
-        run: |
-          echo $GITHUB_WORKSPACE
-          ls -R $GITHUB_WORKSPACE
 
       - name: Submit ${{ matrix.target.name }}
         # Set timeout to 2h. The timeout starts when the job is submitted
@@ -281,14 +268,6 @@ jobs:
             AUTH_HEADER_TOKEN=Q_QLI_S3_TOKEN
             ${{ inputs.variables }}
 
-      - name: Print output ID
-        env:
-          JOBMATRIX: "${{ steps.lava-test-plans.outputs.jobmatrix }}"
-          ARTIFACT_ID: "${{ steps.lava-test-plans.outputs.artifact_id }}"
-        run: |
-          echo "${ARTIFACT_ID}"
-          echo "${JOBMATRIX}"
-
   submit-premerge-job:
     needs: prepare-premerge-jobs
     runs-on: ubuntu-latest
@@ -364,4 +343,4 @@ jobs:
           INPUTS_DISTRO_NAME: "${{ inputs.distro_name }}"
           INPUTS_DISTRO_SUFFIX: "${{ inputs.distro_suffix }}"
         run: |
-            cat ${INPUTS_DISTRO_NAME}${INPUTS_DISTRO_SUFFIX}-test_job_summary >> $GITHUB_STEP_SUMMARY
+            cat "${INPUTS_DISTRO_NAME}${INPUTS_DISTRO_SUFFIX}-test_job_summary" >> "$GITHUB_STEP_SUMMARY"
