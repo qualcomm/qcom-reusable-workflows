@@ -81,7 +81,17 @@ on:
           Additional variables in KEY=VALUE form, one per line, appended to the
           generated variables file. They overwrite everything set by this
           workflow. The token %MACHINE% is replaced with the name of the machine
-          the job is rendered for.
+          the job is rendered for. They must not contain a section header, as
+          everything after one is read into that section.
+      extra_metadata:
+        required: false
+        type: string
+        default: ""
+        description: >
+          Additional LAVA job metadata in key = "value" form, one per line,
+          recorded next to the build metadata this workflow adds. The token
+          %MACHINE% is replaced with the name of the machine the job is
+          rendered for.
       variables_files:
         required: false
         type: string
@@ -136,6 +146,12 @@ on:
 # have to grant at least as much.
 permissions: {}
 
+env:
+  # The revision of lava-test-plans the jobs are rendered with. It is pinned on
+  # the uses: lines below, which cannot take an expression, so keep this in step
+  # with them - it is only recorded in the job metadata.
+  LAVA_TEST_PLANS_REF: 1e0eb3f02721665e60a5c771387aa2e7a8bbc66a
+
 jobs:
   prepare-boot-jobs:
     name: "Prepare boot jobs for ${{ inputs.distro_name }}"
@@ -147,6 +163,27 @@ jobs:
       artifact_id: ${{ steps.lava-test-plans.outputs.artifact_id }}
 
     steps:
+      - name: Collect the build metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="${GITHUB_SHA}"
+          SOURCE_BRANCH="${GITHUB_REF_NAME}"
+          BUILD_TYPE="${GITHUB_EVENT_NAME^^}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_run" ]; then
+              BUILD_TYPE="PR"
+              if [ -f "${GITHUB_EVENT_PATH:-}" ]; then
+                  # github.sha is the target branch here, not the built commit
+                  SOURCE_SHA=$(jq -r '.workflow_run.head_sha // ""' "${GITHUB_EVENT_PATH}")
+                  SOURCE_BRANCH=$(jq -r '.workflow_run.head_branch // ""' "${GITHUB_EVENT_PATH}")
+              fi
+          fi
+          {
+            echo "build_type=${BUILD_TYPE}"
+            echo "source_sha=${SOURCE_SHA}"
+            echo "source_branch=${SOURCE_BRANCH}"
+          } >> "$GITHUB_OUTPUT"
+
       # The action installs and runs lava-test-plans on its own, so neither the
       # calling repository nor lava-test-plans has to be checked out here.
       - name: Run lava-test-plans
@@ -171,12 +208,30 @@ jobs:
           variables_files: ${{ inputs.variables_files }}
           fail_on_error: ${{ inputs.fail_on_error }}
           # Defaults first, caller supplied variables last so they win.
+          # Everything after the section header belongs to EXTRA_METADATA,
+          # which lava-test-plans renders into the job metadata as is, so
+          # the caller's variables have to come before it. %MACHINE% is
+          # substituted per board.
           variables: |
             AUDIO_CLIPS_BASE_DIR=/home/AudioClips/
             DOCKER_IMAGE_POSTPROCESS=ghcr.io/foundriesio/lava-lmp-sign:main
             AUTH_HEADER_NAME=QLIAuthorization
             AUTH_HEADER_TOKEN=Q_QLI_S3_TOKEN
             ${{ inputs.variables }}
+            [EXTRA_METADATA]
+            build-type = "${{ steps.meta.outputs.build_type }}"
+            build-run-id = "${{ inputs.build_id }}"
+            build-url = "${{ inputs.url }}"
+            source-repo = "${{ github.server_url }}/${{ github.repository }}"
+            source-branch = "${{ steps.meta.outputs.source_branch }}"
+            source-sha = "${{ steps.meta.outputs.source_sha }}"
+            distro = "${{ inputs.distro_name }}${{ inputs.distro_suffix }}"
+            testplan = "${{ inputs.boot_testplan != '' && inputs.boot_testplan || format('{0}/boot', inputs.distro_name) }}"
+            testkit-ref = "${{ inputs.testkit_ref }}"
+            lava-test-plans-ref = "${{ env.LAVA_TEST_PLANS_REF }}"
+            gh-workflow-name = "${{ github.workflow }}"
+            machine = "%MACHINE%"
+            ${{ inputs.extra_metadata }}
 
   submit-boot-job:
     needs: prepare-boot-jobs
@@ -267,6 +322,27 @@ jobs:
       artifact_id: ${{ steps.lava-test-plans.outputs.artifact_id }}
 
     steps:
+      - name: Collect the build metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="${GITHUB_SHA}"
+          SOURCE_BRANCH="${GITHUB_REF_NAME}"
+          BUILD_TYPE="${GITHUB_EVENT_NAME^^}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_run" ]; then
+              BUILD_TYPE="PR"
+              if [ -f "${GITHUB_EVENT_PATH:-}" ]; then
+                  # github.sha is the target branch here, not the built commit
+                  SOURCE_SHA=$(jq -r '.workflow_run.head_sha // ""' "${GITHUB_EVENT_PATH}")
+                  SOURCE_BRANCH=$(jq -r '.workflow_run.head_branch // ""' "${GITHUB_EVENT_PATH}")
+              fi
+          fi
+          {
+            echo "build_type=${BUILD_TYPE}"
+            echo "source_sha=${SOURCE_SHA}"
+            echo "source_branch=${SOURCE_BRANCH}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Run lava-test-plans
         id: lava-test-plans
         uses: qualcomm-linux/lava-test-plans@1e0eb3f02721665e60a5c771387aa2e7a8bbc66a # master
@@ -289,12 +365,30 @@ jobs:
           variables_files: ${{ inputs.variables_files }}
           fail_on_error: ${{ inputs.fail_on_error }}
           # Defaults first, caller supplied variables last so they win.
+          # Everything after the section header belongs to EXTRA_METADATA,
+          # which lava-test-plans renders into the job metadata as is, so
+          # the caller's variables have to come before it. %MACHINE% is
+          # substituted per board.
           variables: |
             AUDIO_CLIPS_BASE_DIR=/home/AudioClips/
             DOCKER_IMAGE_POSTPROCESS=ghcr.io/foundriesio/lava-lmp-sign:main
             AUTH_HEADER_NAME=QLIAuthorization
             AUTH_HEADER_TOKEN=Q_QLI_S3_TOKEN
             ${{ inputs.variables }}
+            [EXTRA_METADATA]
+            build-type = "${{ steps.meta.outputs.build_type }}"
+            build-run-id = "${{ inputs.build_id }}"
+            build-url = "${{ inputs.url }}"
+            source-repo = "${{ github.server_url }}/${{ github.repository }}"
+            source-branch = "${{ steps.meta.outputs.source_branch }}"
+            source-sha = "${{ steps.meta.outputs.source_sha }}"
+            distro = "${{ inputs.distro_name }}${{ inputs.distro_suffix }}"
+            testplan = "${{ inputs.premerge_testplan != '' && inputs.premerge_testplan || format('{0}/pre-merge', inputs.distro_name) }}"
+            testkit-ref = "${{ inputs.testkit_ref }}"
+            lava-test-plans-ref = "${{ env.LAVA_TEST_PLANS_REF }}"
+            gh-workflow-name = "${{ github.workflow }}"
+            machine = "%MACHINE%"
+            ${{ inputs.extra_metadata }}
 
   submit-premerge-job:
     needs: prepare-premerge-jobs

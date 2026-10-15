@@ -40,7 +40,8 @@ jobs:
 | `premerge_testplan` | no | Test plan rendered for the pre-merge jobs (default: `<distro_name>/pre-merge`) |
 | `image_type` | no | Image type used to build the image and rootfs file names (default: `qcom-multimedia-image` for `qcom-distro*`, `core-image-base` otherwise) |
 | `os_info` | no | Value of `OS_INFO`, selecting the job metadata template (default: `qcom-distro`) |
-| `variables` | no | Extra `KEY=VALUE` lines appended to the generated variables file. `%MACHINE%` is replaced with the machine name |
+| `variables` | no | Extra `KEY=VALUE` lines appended to the generated variables file. `%MACHINE%` is replaced with the machine name. Must not contain a section header |
+| `extra_metadata` | no | Extra `key = "value"` lines recorded in the LAVA job metadata, see [Job metadata](#job-metadata). `%MACHINE%` is replaced with the machine name |
 | `variables_files` | no | Space or newline separated list of variable files (ini or yaml) checked out by the caller |
 | `pr_number` | no | Pull request number, added to the LAVA job metadata |
 | `pr_url` | no | Pull request URL, added to the LAVA job metadata |
@@ -72,6 +73,19 @@ the calling job has to grant at least:
 - `summary_id`: ID of the uploaded test summary artifact.
 
 Pre-merge tests only run when all boot jobs pass and `devices_premerge` is set.
+
+## Job metadata
+
+Besides the metadata the `os_info` template records, every job carries an
+`EXTRA_METADATA` section describing the build it tests: `build-type`,
+`build-run-id`, `build-url`, `source-repo`, `source-branch`, `source-sha`,
+`distro`, `testplan`, `testkit-ref`, `lava-test-plans-ref`, `gh-workflow-name`
+and `machine`. For `workflow_run` triggers the source branch and SHA are those
+of the commit that was built, not of the target branch.
+
+Callers record more keys with `extra_metadata`. It is appended to the
+`[EXTRA_METADATA]` section of the variables file, after the caller's
+`variables`, which is why those must not open a section of their own.
 
 ## Pinning
 
