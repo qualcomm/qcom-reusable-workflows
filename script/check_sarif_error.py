@@ -80,6 +80,19 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def is_suppressed(result: Dict[str, Any]) -> bool:
+    suppressions = result.get("suppressions", [])
+    if isinstance(suppressions, list):
+        for item in suppressions:
+            if (
+                isinstance(item, dict)
+                and item.get("kind") == "inSource"
+                and item.get("status", "accepted") != "rejected"
+            ):
+                return True
+    return False
+
+
 def main() -> int:
     args = parse_args()
 
@@ -121,7 +134,7 @@ def main() -> int:
                     file=sys.stderr,
                 )
                 return 2
-            if effective_level(result, rules) == "error":
+            if not is_suppressed(result) and effective_level(result, rules) == "error":
                 error_results.append(result)
 
     if error_results:
