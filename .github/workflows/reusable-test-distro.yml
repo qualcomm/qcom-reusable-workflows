@@ -228,7 +228,6 @@ jobs:
             [EXTRA_METADATA]
             build-type = "${{ steps.meta.outputs.build_type }}"
             build-run-id = "${{ inputs.build_id }}"
-            build-url = "${{ inputs.url }}"
             source-repo = "${{ github.server_url }}/${{ github.repository }}"
             source-branch = "${{ steps.meta.outputs.source_branch }}"
             source-sha = "${{ steps.meta.outputs.source_sha }}"
@@ -397,7 +396,6 @@ jobs:
             [EXTRA_METADATA]
             build-type = "${{ steps.meta.outputs.build_type }}"
             build-run-id = "${{ inputs.build_id }}"
-            build-url = "${{ inputs.url }}"
             source-repo = "${{ github.server_url }}/${{ github.repository }}"
             source-branch = "${{ steps.meta.outputs.source_branch }}"
             source-sha = "${{ steps.meta.outputs.source_sha }}"

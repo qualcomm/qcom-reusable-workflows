@@ -82,10 +82,12 @@ flaky board doesn't leave every other board untested.
 
 Besides the metadata the `os_info` template records, every job carries an
 `EXTRA_METADATA` section describing the build it tests: `build-type`,
-`build-run-id`, `build-url`, `source-repo`, `source-branch`, `source-sha`,
-`distro`, `testplan`, `testkit-ref`, `lava-test-plans-ref`, `gh-workflow-name`
-and `machine`. For `workflow_run` triggers the source branch and SHA are those
-of the commit that was built, not of the target branch.
+`build-run-id`, `source-repo`, `source-branch`, `source-sha`, `distro`,
+`testplan`, `testkit-ref`, `lava-test-plans-ref`, `gh-workflow-name` and
+`machine`. For `workflow_run` triggers the source branch and SHA are those
+of the commit that was built, not of the target branch. The build URL of
+each machine is recorded as `build-url` by the project's own metadata
+template.
 
 Callers record more keys with `extra_metadata`. It is appended to the
 `[EXTRA_METADATA]` section of the variables file, after the caller's
