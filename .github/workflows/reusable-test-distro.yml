@@ -169,6 +169,7 @@ jobs:
     permissions:
       contents: read
     strategy:
+      fail-fast: false
       matrix: ${{ fromJson(needs.prepare-boot-jobs.outputs.jobmatrix) }}
     steps:
       - name: 'Download job templates'
@@ -296,6 +297,7 @@ jobs:
     permissions:
       contents: read
     strategy:
+      fail-fast: false
       matrix: ${{ fromJson(needs.prepare-premerge-jobs.outputs.jobmatrix) }}
     steps:
       - name: 'Download job templates'
