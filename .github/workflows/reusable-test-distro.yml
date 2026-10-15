@@ -178,7 +178,7 @@ jobs:
         # of devices
         timeout-minutes: 120
         id: submit
-        uses: foundriesio/lava-action@v13
+        uses: foundriesio/lava-action@2392ee48130c6d99c97bb91cddb46d1fcde43f3e # v14
         with:
           lava_token: ${{ secrets.LAVATOKEN }}
           lava_url: ${{ inputs.lava_url }}
@@ -190,7 +190,7 @@ jobs:
           save_job_details: true
           result_file_name: "${{ matrix.target.result_file }}"
           test_job_file_name_prefix: "${{ inputs.distro_name }}${{ inputs.distro_suffix }}-"
-      - uses: qualcomm-linux/github-action-matrix-outputs-write@v3
+      - uses: qualcomm-linux/github-action-matrix-outputs-write@59fdd8db9c91b623ec1111b9c081435b1533f529 # v3
         if: always()
         id: out
         with:
@@ -294,7 +294,7 @@ jobs:
         # It may spend some time in LAVA queue as there is a limited number
         # of devices
         timeout-minutes: 120
-        uses: foundriesio/lava-action@v13
+        uses: foundriesio/lava-action@2392ee48130c6d99c97bb91cddb46d1fcde43f3e # v14
         with:
           lava_token: ${{ secrets.LAVATOKEN }}
           lava_url: ${{ inputs.lava_url }}
