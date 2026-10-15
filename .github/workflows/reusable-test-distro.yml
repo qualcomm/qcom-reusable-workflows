@@ -122,7 +122,7 @@ jobs:
       # calling repository nor lava-test-plans has to be checked out here.
       - name: Run lava-test-plans
         id: lava-test-plans
-        uses: qualcomm-linux/lava-test-plans@72813c68eb386a8491c6b20c70c0324f3228a51c  # first commit with github action
+        uses: qualcomm-linux/lava-test-plans@1e0eb3f02721665e60a5c771387aa2e7a8bbc66a # master
         with:
           machines: ${{ inputs.devices }}
           distro_name: ${{ inputs.distro_name }}${{ inputs.distro_suffix }}
@@ -244,7 +244,7 @@ jobs:
     steps:
       - name: Run lava-test-plans
         id: lava-test-plans
-        uses: mwasilew/lava-test-plans@github-action
+        uses: qualcomm-linux/lava-test-plans@1e0eb3f02721665e60a5c771387aa2e7a8bbc66a # master
         with:
           machines: ${{ inputs.devices_premerge }}
           distro_name: ${{ inputs.distro_name }}${{ inputs.distro_suffix }}
