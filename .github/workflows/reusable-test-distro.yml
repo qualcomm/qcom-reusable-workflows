@@ -37,6 +37,13 @@ on:
         required: false
         type: string
         description: Comma separated list of devices to be used for testing. Set when different from devices running boot test.
+      premerge_on_booted:
+        required: false
+        type: boolean
+        default: false
+        description: >
+          Run the pre-merge tests on the devices_premerge boards that booted,
+          rather than skipping them all when any boot job fails.
       distro_name:
         required: true
         type: string
@@ -272,7 +279,7 @@ jobs:
         id: out
         with:
           matrix-step-name: "${{ github.job }}-${{ inputs.distro_name }}${{ inputs.distro_suffix }}"
-          matrix-key: ${{ matrix.target.name }}-${{ inputs.distro_name }}${{ inputs.distro_suffix }}
+          matrix-key: ${{ matrix.target.name }}
           artifact-name: ${{ github.job }}-${{ inputs.distro_name }}${{ inputs.distro_suffix }}-${{ matrix.target.name }}
           outputs: |-
             result: ${{ steps.submit.outcome }}
@@ -280,41 +287,53 @@ jobs:
   boot-job-result:
     runs-on: ubuntu-latest
     needs: [submit-boot-job]
+    if: always()
     permissions:
       contents: read
     outputs:
-      boot_result: "${{ steps.print-boot-result.outputs.boot_result }}"
+      booted_devices: ${{ steps.collect.outputs.booted_devices }}
     steps:
       - uses: qualcomm-linux/github-action-matrix-outputs-read@2b2498aa0fc6c565e02af0f3a3c5b7e1b6ae07f4
         id: read
         with:
           matrix-step-name: "submit-boot-job-${{ inputs.distro_name }}${{ inputs.distro_suffix }}"
           download-file-pattern: "submit-boot-job-${{ inputs.distro_name }}${{ inputs.distro_suffix }}*"
-      - id: print-boot-result
-        name: "Print boot result"
+      - name: Collect the devices that booted
+        id: collect
         env:
-          OUTPUTS_RESULT: "${{ steps.read.outputs.result }}"
+          OUTPUTS_RESULT: ${{ steps.read.outputs.result }}
+          NEEDS_SUBMIT_RESULT: ${{ needs.submit-boot-job.result }}
+          INPUTS_DEVICES_PREMERGE: ${{ inputs.devices_premerge }}
+          INPUTS_PREMERGE_ON_BOOTED: ${{ inputs.premerge_on_booted }}
         run: |
-          # collapse results of matrix of boot test jobs to a single result
-          yq --version
-
-          BOOT_RESULT="failure"
+          set -euo pipefail
+          # The read action returns {"<output name>": {"<matrix key>": value}},
+          # and the matrix key is the device name. Pick the devices_premerge
+          # boards that booted: all of them only if every boot job passed,
+          # unless premerge_on_booted asks for whatever booted.
           echo "${OUTPUTS_RESULT}" | yq
-          RESULT=$(echo "${OUTPUTS_RESULT}" | yq '.result | [.[]] | all_c(. == "success")')
-          # RESULT will be true only if there are no failures
-          if [ "$RESULT" == "true" ]; then
-            BOOT_RESULT="success"
+          BOOTED=""
+          if [ "${NEEDS_SUBMIT_RESULT}" = "success" ]; then
+              BOOTED=$(echo "${OUTPUTS_RESULT}" | yq -o=json -I=0 '.result // {}' |
+                  jq -r --arg wanted "${INPUTS_DEVICES_PREMERGE}" \
+                        --argjson partial "${INPUTS_PREMERGE_ON_BOOTED}" '
+                      ($wanted | split(",") | map(gsub("^\\s+|\\s+$"; "")
+                          | select(. != ""))) as $wanted
+                      | to_entries
+                      | if $partial or (length > 0 and all(.value == "success"))
+                        then . else [] end
+                      | map(select(.value == "success") | .key)
+                      | map(select(. as $d | $wanted | index($d)))
+                      | join(",")')
           fi
-          echo "boot_result=$BOOT_RESULT"
-          echo "boot_result=$BOOT_RESULT" >> "$GITHUB_OUTPUT"
+          echo "devices that booted: ${BOOTED:-(none)}"
+          echo "booted_devices=${BOOTED}" >> "$GITHUB_OUTPUT"
 
   prepare-premerge-jobs:
     name: "Prepare pre-merge jobs for ${{ inputs.distro_name }}"
     runs-on: ubuntu-latest
     needs: boot-job-result
-    # run only if boot jobs are successful
-    if: ${{ needs.boot-job-result.outputs.boot_result == 'success' &&
-            inputs.devices_premerge != '' }}
+    if: ${{ needs.boot-job-result.outputs.booted_devices != '' }}
     permissions:
       actions: read # download the build-url_* artifacts of build_id
     outputs:
@@ -347,7 +366,7 @@ jobs:
         id: lava-test-plans
         uses: qualcomm-linux/lava-test-plans@1e0eb3f02721665e60a5c771387aa2e7a8bbc66a # master
         with:
-          machines: ${{ inputs.devices_premerge }}
+          machines: ${{ needs.boot-job-result.outputs.booted_devices }}
           distro_name: ${{ inputs.distro_name }}${{ inputs.distro_suffix }}
           image_type: ${{ inputs.image_type }}
           # build_id takes precedence over build_url in the action, so only
@@ -427,10 +446,7 @@ jobs:
   publish-test-summary:
     name: "Publish Summary ${{ inputs.distro_name }}${{ inputs.distro_suffix }}"
     needs: [boot-job-result, submit-premerge-job]
-    if: |
-      always()
-      && contains(needs.*.result, 'success')
-      && !contains(needs.*.result, 'failure')
+    if: always() && needs.boot-job-result.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       actions: read # download the test job results

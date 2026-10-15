@@ -3,7 +3,7 @@
 [`reusable-test-distro.yml`](../.github/workflows/reusable-test-distro.yml) runs LAVA boot and pre-merge tests for a single distro
 produced by a Yocto or Debian build. It renders the test job definitions with
 [lava-test-plans](https://github.com/qualcomm-linux/lava-test-plans), submits them to
-LAVA, collapses the boot results into a single pass/fail, and publishes a job summary.
+LAVA, runs the pre-merge tests on the boards that booted, and publishes a job summary.
 
 The workflow expects the run identified by `build_id` to contain one
 `build-url_<machine>_<distro>` artifact per tested machine, holding the base URL of the
@@ -32,6 +32,7 @@ jobs:
 | `url` | no | Base URL of the build, used for every machine instead of the `build-url_*` artifacts |
 | `devices` | yes | Comma separated list of devices to run boot tests on |
 | `devices_premerge` | no | Comma separated list of devices to run pre-merge tests on. Pre-merge tests are skipped when empty |
+| `premerge_on_booted` | no | Run pre-merge tests on the `devices_premerge` boards that booted even when other boot jobs failed (default: `false`) |
 | `distro_name` | yes | Name of the distro used in the build, e.g. `nodistro` or `qcom-distro` |
 | `distro_suffix` | no | Suffix appended to the distro name, e.g. a kernel variant |
 | `testkit_ref` | yes | Ref in the `qcom-linux-testkit` repository (CalVer tag or commit SHA) |
@@ -72,7 +73,9 @@ the calling job has to grant at least:
 
 - `summary_id`: ID of the uploaded test summary artifact.
 
-Pre-merge tests only run when all boot jobs pass and `devices_premerge` is set.
+Pre-merge tests run on the `devices_premerge` boards only when all boot jobs pass.
+With `premerge_on_booted: true` they run on those of them that booted instead, so one
+flaky board doesn't leave every other board untested.
 
 ## Job metadata
 
