@@ -1,0 +1,117 @@
+# Distro Test Workflow
+
+[`reusable-test-distro.yml`](../.github/workflows/reusable-test-distro.yml) runs LAVA boot and pre-merge tests for a single distro
+produced by a Yocto or Debian build. It renders the test job definitions with
+[lava-test-plans](https://github.com/qualcomm-linux/lava-test-plans), submits them to
+LAVA, runs the pre-merge tests on the boards that booted, and publishes a job summary.
+
+The workflow expects the run identified by `build_id` to contain one
+`build-url_<machine>_<distro>` artifact per tested machine, holding the base URL of the
+published build. Callers that publish every machine under the same base URL can pass
+it in `url` instead.
+
+```yml
+jobs:
+  test-qcom-distro:
+    uses: qualcomm/qcom-reusable-workflows/.github/workflows/reusable-test-distro.yml@v2
+    secrets: inherit
+    with:
+      build_id: "${{ inputs.build_id }}"
+      devices: "qcs615-ride,rb3gen2-core-kit"
+      devices_premerge: "qcs615-ride,rb3gen2-core-kit"
+      project_name: "meta-qcom"
+      distro_name: "qcom-distro"
+      testkit_ref: "testkit-2026.08.09"
+```
+
+**Inputs:**
+
+| Input | Required | Description |
+| ---- | ---- | ---- |
+| `build_id` | yes | ID of the workflow run that built the images, holding the `build-url_*` artifacts unless `url` is set |
+| `url` | no | Base URL of the build, used for every machine instead of the `build-url_*` artifacts |
+| `devices` | yes | Comma separated list of devices to run boot tests on |
+| `devices_premerge` | no | Comma separated list of devices to run pre-merge tests on. Pre-merge tests are skipped when empty |
+| `premerge_on_booted` | no | Run pre-merge tests on the `devices_premerge` boards that booted even when other boot jobs failed (default: `false`) |
+| `distro_name` | yes | Name of the distro used in the build, e.g. `nodistro` or `qcom-distro` |
+| `distro_suffix` | no | Suffix appended to the distro name, e.g. a kernel variant |
+| `testkit_ref` | yes | Ref in the `qcom-linux-testkit` repository (CalVer tag or commit SHA) |
+| `project_name` | yes | Project name in `lava-test-plans` |
+| `boot_testplan` | no | Test plan rendered for the boot jobs, relative to the project directory (default: `<distro_name>/boot`) |
+| `premerge_testplan` | no | Test plan rendered for the pre-merge jobs (default: `<distro_name>/pre-merge`) |
+| `image_type` | no | Image type used to build the image and rootfs file names (default: `qcom-multimedia-image` for `qcom-distro*`, `core-image-base` otherwise) |
+| `os_info` | no | Value of `OS_INFO`, selecting the job metadata template (default: `qcom-distro`) |
+| `variables` | no | Extra `KEY=VALUE` lines appended to the generated variables file. `%MACHINE%` is replaced with the machine name. Must not contain a section header |
+| `extra_metadata` | no | Extra `key = "value"` lines recorded in the LAVA job metadata, see [Job metadata](#job-metadata). `%MACHINE%` is replaced with the machine name |
+| `variables_files` | no | Space or newline separated list of variable files (ini or yaml) checked out by the caller |
+| `fail_on_error` | no | Fail the preparation job when a build URL is missing or rendering fails for any machine. Set to `false` to submit only the jobs that rendered (default: `true`) |
+| `pr_number` | no | Pull request number, added to the LAVA job metadata |
+| `pr_url` | no | Pull request URL, added to the LAVA job metadata |
+| `lava_url` | no | Hostname of the LAVA instance, without the scheme (default: `lava.infra.foundries.io`) |
+| `known_failures_file` | no | Known failures list applied to the summary, relative to the caller's workspace (see [`test-job-summary`](../.github/actions/test-job-summary)). Empty disables it |
+| `kernel` | no | Kernel flavour under test, matched against the `kernels` filter of known failures entries |
+
+**Secrets:**
+
+- `LAVATOKEN` (required): API token used to submit jobs to the LAVA instance. Pass it
+  explicitly or with `secrets: inherit`.
+
+**Permissions:**
+
+The workflow grants no token permissions by default and each job asks only for
+what it needs. A reusable workflow can't be granted more than its caller has, so
+the calling job has to grant at least:
+
+```yml
+    permissions:
+      actions: read
+      checks: write
+      contents: read
+      pull-requests: write
+```
+
+**Outputs:**
+
+- `summary_id`: ID of the uploaded test summary artifact.
+
+Pre-merge tests run on the `devices_premerge` boards only when all boot jobs pass.
+With `premerge_on_booted: true` they run on those of them that booted instead, so one
+flaky board doesn't leave every other board untested.
+
+## Job metadata
+
+Besides the metadata the `os_info` template records, every job carries an
+`EXTRA_METADATA` section describing the build it tests: `build-type`,
+`build-run-id`, `source-repo`, `source-branch`, `source-sha`, `distro`,
+`testplan`, `testkit-ref`, `lava-test-plans-ref`, `gh-workflow-name` and
+`machine`. For `workflow_run` triggers the source branch and SHA are those
+of the commit that was built, not of the target branch. The build URL of
+each machine is recorded as `build-url` by the project's own metadata
+template.
+
+Callers record more keys with `extra_metadata`. It is appended to the
+`[EXTRA_METADATA]` section of the variables file, after the caller's
+`variables`, which is why those must not open a section of their own.
+
+## Pinning
+
+Test jobs are rendered by the `lava-test-plans` action, which lives in the root of the
+[lava-test-plans](https://github.com/qualcomm-linux/lava-test-plans) repository, and are
+submitted by [lava-action](https://github.com/foundriesio/lava-action). Both are used
+straight from their own repositories - no checkout, no vendored copy - and both are
+pinned by the `uses:` lines in this workflow.
+
+Those pins are deliberately not inputs. `uses:` accepts no expressions, so a caller could
+not vary them anyway; instead a caller selects a whole set of tested revisions by pinning
+the ref of this workflow, and bumping any of them is a pull request against this
+repository. Since the `lava-test-plans` tool and the test plans ship in one package, its
+pin moves the renderer and the plans together and they cannot drift apart.
+
+The [`test-job-summary`](../.github/actions/test-job-summary) action lives in this
+repository rather than in the caller, and is referenced by repository path and ref for
+the same reason, so no job needs a copy of this repository.
+
+Anything the job templates need beyond the defaults set by the workflow
+(`AUDIO_CLIPS_BASE_DIR`, `DOCKER_IMAGE_POSTPROCESS`, `AUTH_HEADER_NAME`,
+`AUTH_HEADER_TOKEN`) is passed through `variables` or `variables_files`, which are
+applied last and therefore overwrite those defaults.
