@@ -54,7 +54,8 @@ jobs:
 **Secrets:**
 
 - `LAVATOKEN` (required): API token used to submit jobs to the LAVA instance. Pass it
-  explicitly or with `secrets: inherit`.
+  explicitly or with `secrets: inherit`. See
+  [Using it in your repository](#using-it-in-your-repository) for how to get access.
 
 **Permissions:**
 
@@ -77,6 +78,20 @@ the calling job has to grant at least:
 Pre-merge tests run on the `devices_premerge` boards only when all boot jobs pass.
 With `premerge_on_booted: true` they run on those of them that booted instead, so one
 flaky board doesn't leave every other board untested.
+
+## Using it in your repository
+
+> [!NOTE]
+> This section is a work in progress; the process is still being worked out.
+
+`LAVATOKEN` is an organization secret of `qualcomm-linux`, and a repository can't
+use it until it has been granted access. Request that with a ticket at
+go/ossops/ under "Other GitHub requests", naming the repository that needs
+`LAVATOKEN`.
+
+Once access is granted, pass the secret to the workflow with `secrets: inherit` or
+explicitly, as in the example above, and grant the calling job the permissions
+listed above.
 
 ## Job metadata
 
