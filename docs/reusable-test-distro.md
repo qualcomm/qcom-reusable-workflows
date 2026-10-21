@@ -93,6 +93,19 @@ Once access is granted, pass the secret to the workflow with `secrets: inherit` 
 explicitly, as in the example above, and grant the calling job the permissions
 listed above.
 
+Test results are posted as pull request comments by the "Test Reporting App".
+This workflow doesn't use it itself; the caller's comment step gets a token for it
+from the app's private key, stored in the `TEST_REPORTING_APP_TOKEN` organization
+secret:
+
+```yml
+          client-id: 2291458
+          private-key: ${{ secrets.TEST_REPORTING_APP_TOKEN }}
+```
+
+Unlike `LAVATOKEN`, that secret is already available to every repository in
+`qualcomm-linux`, so it needs no ticket.
+
 ## Job metadata
 
 Besides the metadata the `os_info` template records, every job carries an
