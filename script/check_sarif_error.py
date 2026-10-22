@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import requests
@@ -82,6 +83,39 @@ class CodeScanningUnavailable(Exception):
     """Raised when GitHub code scanning is not enabled (internal/private repo without GHAS)."""
 
 
+MAX_ATTEMPTS = 4
+RETRY_BACKOFF_SECONDS = 2
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+def get_with_retry(url: str, headers: Dict[str, str], params: Dict[str, str]) -> requests.Response:
+    """
+    GET with exponential backoff on connection errors, timeouts and transient HTTP statuses.
+    Raises requests.RequestException once all attempts are exhausted.
+    """
+    attempt = 1
+    while True:
+        try:
+            resp = requests.get(url, headers=headers, params=params, timeout=30)
+            if resp.status_code not in RETRYABLE_STATUS_CODES:
+                return resp
+            if attempt == MAX_ATTEMPTS:
+                resp.raise_for_status()  # raises HTTPError for 429/5xx
+            reason = f"HTTP {resp.status_code}"
+        except (requests.ConnectionError, requests.Timeout) as e:
+            if attempt == MAX_ATTEMPTS:
+                raise
+            reason = str(e)
+
+        delay = RETRY_BACKOFF_SECONDS * 2 ** (attempt - 1)
+        print(
+            f"Request failed ({reason}); retrying in {delay}s (attempt {attempt}/{MAX_ATTEMPTS})",
+            file=sys.stderr,
+        )
+        time.sleep(delay)
+        attempt += 1
+
+
 def fetch_open_alerts(owner: str, repo: str, token: str, ref: str) -> List[Dict[str, Any]]:
     """
     Fetch open code-scanning alerts from GitHub.
@@ -112,7 +146,7 @@ def fetch_open_alerts(owner: str, repo: str, token: str, ref: str) -> List[Dict[
         # Add page parameter for pagination
         params["page"] = str(page)
 
-        resp = requests.get(url, headers=headers, params=params, timeout=30)
+        resp = get_with_retry(url, headers, params)
         if resp.status_code == 403 and NO_ADVANCED_SECURITY_MESSAGE in resp.text:
             raise CodeScanningUnavailable(resp.json().get("message", ""))
         resp.raise_for_status()
