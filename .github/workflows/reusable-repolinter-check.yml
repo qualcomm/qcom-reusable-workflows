@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   run-repolinter-check:
-    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
     name: Run Repolinter Check
     runs-on: ubuntu-latest
     steps:
