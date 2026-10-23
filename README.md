@@ -145,6 +145,12 @@ The workflow:
 
 For detailed configuration options and default values for each action, please refer to their respective GitHub repositories.
 
+## Distro Test Workflow
+
+`reusable-test-distro.yml` runs LAVA boot and pre-merge tests for a single distro
+produced by a Yocto or Debian build. See
+[docs/reusable-test-distro.md](docs/reusable-test-distro.md) for its inputs and usage.
+
 ## Branches
 
 **main**: Primary development branch. Contributors should develop submissions based on this branch, and submit pull requests to this branch.
