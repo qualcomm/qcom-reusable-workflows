@@ -10,7 +10,10 @@ on:
       semgrep-cli-options:
         required: false
         type: string
-        default: '--config auto --config reusable-workflows/semgrep_rules/rules.yaml'
+        # use-defused-xml-parse is excluded: defusedxml is unmaintained and
+        # the Python 3.13 docs no longer recommend it. See
+        # https://github.com/qualcomm/qcom-reusable-workflows/issues/81
+        default: '--config auto --config reusable-workflows/semgrep_rules/rules.yaml --exclude-rule python.lang.security.use-defused-xml-parse.use-defused-xml-parse'
       enable-repolinter-check:
         required: false
         type: boolean
