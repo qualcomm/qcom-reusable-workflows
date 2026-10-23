@@ -57,7 +57,7 @@ jobs:
 
 **Configuration Options:**
 - `enable-semgrep-scan`: Boolean to enable/disable the scan (default: `true`)
-- `semgrep-cli-options`: String containing CLI options for Semgrep (default: `--config auto`)
+- `semgrep-cli-options`: String containing CLI options for Semgrep (default: `--config auto --config reusable-workflows/semgrep_rules/rules.yaml --exclude-rule python.lang.security.use-defused-xml-parse.use-defused-xml-parse`). The `use-defused-xml-parse` rule is excluded because defusedxml is unmaintained and the Python 3.13 documentation no longer recommends it; see [#81](https://github.com/qualcomm/qcom-reusable-workflows/issues/81).
 
 **Available Semgrep CLI Options:**
 
