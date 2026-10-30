@@ -59,13 +59,6 @@ jobs:
 - `enable-semgrep-scan`: Boolean to enable/disable the scan (default: `true`)
 - `semgrep-cli-options`: String containing CLI options for Semgrep (default: `--config auto`)
 
-For public repositories, the workflow excludes
-`python.lang.security.use-defused-xml-parse.use-defused-xml-parse`
-from scanning, including when custom `semgrep-cli-options` are supplied.
-This rule produces no SARIF finding, code-scanning alert, or PR annotation.
-Private/internal repositories retain the existing rule selection.
-All other error-level findings retain the existing blocking behavior.
-
 **Available Semgrep CLI Options:**
 
 Semgrep supports numerous command-line options. Some commonly used options include:

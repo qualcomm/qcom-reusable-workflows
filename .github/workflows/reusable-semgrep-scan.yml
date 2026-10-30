@@ -48,12 +48,7 @@ jobs:
         run: git config --global --add safe.directory "$(pwd)"
       
       - name: Run Semgrep Scan
-        env:
-          REPOSITORY_VISIBILITY: ${{ github.event.repository.visibility }}
         run: |
-          if [ "$REPOSITORY_VISIBILITY" = "public" ]; then
-            SEMGREP_CLI_OPTIONS="$SEMGREP_CLI_OPTIONS --exclude-rule python.lang.security.use-defused-xml-parse.use-defused-xml-parse"
-          fi
           semgrep scan --sarif --output semgrep.sarif $SEMGREP_CLI_OPTIONS
       
       - name: Upload to Security Tab
