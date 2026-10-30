@@ -207,6 +207,9 @@ def extract_error_results(sarif: Dict[str, Any]) -> List[Dict[str, Any]]:
                 sys.exit(2)
             
             if get_effective_level(result, rules) == "error":
+                rule_index = result.get("ruleIndex")
+                if not result.get("ruleId") and isinstance(rule_index, int) and 0 <= rule_index < len(rules):
+                    result["ruleId"] = rules[rule_index].get("id")
                 error_results.append(result)
 
     return error_results
