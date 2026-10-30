@@ -12,9 +12,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import requests
 
-# Reported but non-blocking. Only applied to GitHub alerts, which exist only for
-# public repos (SARIF upload is public-only); the SARIF-only path still blocks it.
-NON_BLOCKING_RULES = {"python.lang.security.use-defused-xml-parse.use-defused-xml-parse"}
 
 
 def get_effective_level(result: Dict[str, Any], rules: List[Dict[str, Any]]) -> str:
@@ -261,7 +258,6 @@ def main() -> int:
             return 2
 
     if open_alerts is not None:
-        open_alerts = [a for a in open_alerts if a.get("rule", {}).get("id") not in NON_BLOCKING_RULES]
         if open_alerts:
             print(f"Found {len(open_alerts)} open alert(s) on GitHub", file=sys.stderr)
             for alert in open_alerts:
