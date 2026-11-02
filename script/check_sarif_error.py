@@ -201,19 +201,12 @@ def extract_error_results(sarif: Dict[str, Any]) -> List[Dict[str, Any]]:
             print("Error: Invalid SARIF file: 'rules' and 'results' must be arrays", file=sys.stderr)
             sys.exit(2)
 
-        if not all(isinstance(rule, dict) for rule in rules):
-            print("Error: Invalid SARIF file: each rule must be an object", file=sys.stderr)
-            sys.exit(2)
-
         for result in results:
             if not isinstance(result, dict):
                 print("Error: Invalid SARIF file: each result must be an object", file=sys.stderr)
                 sys.exit(2)
             
             if get_effective_level(result, rules) == "error":
-                rule_index = result.get("ruleIndex")
-                if not result.get("ruleId") and isinstance(rule_index, int) and 0 <= rule_index < len(rules):
-                    result["ruleId"] = rules[rule_index].get("id")
                 error_results.append(result)
 
     return error_results
