@@ -9,7 +9,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 import requests
 
 
@@ -48,7 +48,7 @@ def get_location(result: Dict[str, Any]) -> Tuple[Optional[str], Optional[int]]:
     )
 
 
-def print_finding(data: Dict[str, Any], is_github_alert: bool = False) -> None:
+def print_finding(data: Dict[str, Any], is_github_alert: bool = False, prefix: str = "ERROR") -> None:
     """Print a formatted error message for a SARIF result or GitHub alert."""
     if is_github_alert:
         # GitHub API alert format
@@ -68,7 +68,7 @@ def print_finding(data: Dict[str, Any], is_github_alert: bool = False) -> None:
     
     location = f"{path}:{line}" if path and line else path if path else "unknown location"
     
-    print(f"ERROR: {location}", file=sys.stderr)
+    print(f"{prefix}: {location}", file=sys.stderr)
     print(f"  Rule: {rule_id}", file=sys.stderr)
     print(f"  Message: {message}", file=sys.stderr)
     if alert_url:
@@ -165,6 +165,34 @@ def fetch_open_alerts(owner: str, repo: str, token: str, ref: str) -> List[Dict[
     return all_alerts
 
 
+def parse_rule_list(value: str) -> Set[str]:
+    """Parse a comma- and/or whitespace-separated list of rule IDs."""
+    return set(value.replace(",", " ").split())
+
+
+def split_non_blocking(
+    findings: List[Dict[str, Any]], non_blocking_rules: Set[str], is_github_alert: bool = False
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Split findings into (blocking, non-blocking) by rule ID."""
+    blocking, non_blocking = [], []
+    for finding in findings:
+        if is_github_alert:
+            rule_id = finding.get("rule", {}).get("id")
+        else:
+            rule_id = finding.get("ruleId")
+        (non_blocking if rule_id in non_blocking_rules else blocking).append(finding)
+    return blocking, non_blocking
+
+
+def report_non_blocking(findings: List[Dict[str, Any]], is_github_alert: bool = False) -> None:
+    """Print findings that are reported but do not fail the check."""
+    if not findings:
+        return
+    print(f"Ignoring {len(findings)} finding(s) from non-blocking rules:", file=sys.stderr)
+    for finding in findings:
+        print_finding(finding, is_github_alert=is_github_alert, prefix="NOTICE")
+
+
 def load_sarif(file_path: Path) -> Dict[str, Any]:
     """Load and validate SARIF file."""
     try:
@@ -231,6 +259,9 @@ def main() -> int:
     github_repository = os.environ.get("GITHUB_REPOSITORY", "")
     github_ref = os.environ.get("GITHUB_REF", "")
     github_token = os.environ.get("GITHUB_TOKEN")
+    # Rules whose findings are still reported (SARIF, Security tab) but do
+    # not fail the check
+    non_blocking_rules = parse_rule_list(os.environ.get("SEMGREP_NON_BLOCKING_RULES", ""))
 
     # Parse repository owner and name
     if "/" not in github_repository:
@@ -258,6 +289,8 @@ def main() -> int:
             return 2
 
     if open_alerts is not None:
+        open_alerts, ignored = split_non_blocking(open_alerts, non_blocking_rules, is_github_alert=True)
+        report_non_blocking(ignored, is_github_alert=True)
         if open_alerts:
             print(f"Found {len(open_alerts)} open alert(s) on GitHub", file=sys.stderr)
             for alert in open_alerts:
@@ -267,7 +300,9 @@ def main() -> int:
         print("No error-severity findings matching open GitHub alerts.")
         return 0
 
-    print("Using SARIF-only check (all error-severity findings will fail)", file=sys.stderr)
+    print("Using SARIF-only check (error-severity findings from blocking rules will fail)", file=sys.stderr)
+    error_results, ignored = split_non_blocking(error_results, non_blocking_rules)
+    report_non_blocking(ignored)
     if error_results:
         for result in error_results:
             print_finding(result)

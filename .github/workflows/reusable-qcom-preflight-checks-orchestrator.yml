@@ -11,6 +11,14 @@ on:
         required: false
         type: string
         default: '--config auto --config reusable-workflows/semgrep_rules/rules.yaml'
+      semgrep-non-blocking-rules:
+        required: false
+        type: string
+        # use-defused-xml-parse demands defusedxml, which is unmaintained and
+        # no longer recommended by the Python 3.13 docs. See
+        # https://github.com/qualcomm/qcom-reusable-workflows/issues/81
+        default: 'python.lang.security.use-defused-xml-parse.use-defused-xml-parse'
+        description: 'Comma- or space-separated Semgrep rule IDs whose findings are reported but do not fail the scan.'
       enable-repolinter-check:
         required: false
         type: boolean
@@ -62,6 +70,7 @@ jobs:
     uses: ./.github/workflows/reusable-semgrep-scan.yml
     with:
       semgrep-cli-options: ${{ inputs.semgrep-cli-options }}
+      semgrep-non-blocking-rules: ${{ inputs.semgrep-non-blocking-rules }}
     permissions:
       contents: read
       security-events: write
