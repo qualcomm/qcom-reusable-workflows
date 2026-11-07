@@ -110,6 +110,7 @@ The workflow automatically:
 
 **Configuration Options:**
 - `enable-repolinter-check`: Boolean to enable/disable the check (default: `true`)
+- `repolint-config-path`: Path to a local Repolinter ruleset override relative to the repository root (default: `repolint.json`); used by both Repolinter and Repository Policy checks.
 
 The workflow:
 - Checks for a local `repolint.json` configuration file in your repository
