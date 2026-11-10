@@ -1,0 +1,7 @@
+# Default code owners
+* @mynameistechno @njjetha
+
+# Semgrep security owners
+/semgrep_rules/ @qualcomm/qpsi-oss-security-reviewers
+/script/check_sarif_error.py @qualcomm/qpsi-oss-security-reviewers
+/.github/workflows/reusable-semgrep-scan.yml @qualcomm/qpsi-oss-security-reviewers
