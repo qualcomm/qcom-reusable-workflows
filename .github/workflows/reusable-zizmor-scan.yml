@@ -1,0 +1,113 @@
+name: Zizmor Scan Reusable Workflow
+
+# Push-scan surface for the enterprise zizmor rollout: upload-only, NEVER fails.
+# Blocking enforcement is a SEPARATE surface (the PR-gate required workflow in
+# qcom-enterprise-workflows). This job only creates reviewable code-scanning
+# alerts on push. Scans against the SAME pinned central policy as the PR gate.
+on:
+  workflow_call:
+    inputs:
+      # Central, trusted policy — pinned by immutable SHA. Overridable only so the
+      # orchestrator can pass a single source of truth; defaults are the live pins.
+      zizmor-config-repo:
+        required: false
+        type: string
+        default: qualcomm/qcom-enterprise-workflows
+      zizmor-config-ref:
+        required: false
+        type: string
+        default: 9b8fedaa9668a9bdd26e68ab4c197f5708d00ea7   # immutable SHA — never a branch/tag
+      zizmor-config-path:
+        required: false
+        type: string
+        default: .github/zizmor-enterprise-policy.yml
+
+permissions:
+  contents: read
+  security-events: write   # upload SARIF to code scanning
+  # NOTE: zizmor-action also wants `actions: read` for advanced-security on
+  # private/internal repos. Deliberately omitted: callers (~500, almost all
+  # public) don't grant it, and requesting more than the caller allows is a
+  # hard error. Public repos don't need it; on private repos the upload is a
+  # no-op tolerated by continue-on-error. Revisit when onboarding private repos.
+
+jobs:
+  # Admin-gated enable/disable via the enterprise custom property
+  # `Require-actions-security-scan` (default true; only admins set it false).
+  # Custom properties are NOT readable in `if:` directly, so read the value here
+  # and expose a boolean the scan job consumes. Deliberately NOT a caller input:
+  # governance requires admins control this, not repo developers.
+  check-gate:
+    name: Check Zizmor Push-Scan Gate
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.gate.outputs.enabled }}
+    steps:
+      - name: Read Require-actions-security-scan custom property
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Default true: run the scan unless an admin has explicitly set the
+          # property to a falsey value. Missing/unset property -> run (fail open
+          # to scanning, since the enterprise default is true).
+          value="$(gh api "repos/${REPO}/properties/values" \
+            --jq '.[] | select(.property_name=="Require-actions-security-scan") | .value' \
+            2>/dev/null || true)"
+          value="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
+          if [ "$value" = "false" ] || [ "$value" = "no" ] || [ "$value" = "0" ]; then
+            echo "Custom property Require-actions-security-scan=${value}; skipping zizmor push scan."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Zizmor push scan enabled (property value: '${value:-<unset, default true>}')."
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  run-zizmor-scan:
+    name: Run Zizmor Scan (upload-only)
+    needs: check-gate
+    if: ${{ needs.check-gate.outputs.enabled == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository under scan
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch central zizmor policy (pinned, trusted)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: ${{ inputs.zizmor-config-repo }}
+          ref: ${{ inputs.zizmor-config-ref }}
+          path: .zizmor-central
+          persist-credentials: false
+          sparse-checkout: ${{ inputs.zizmor-config-path }}
+          sparse-checkout-cone-mode: false
+
+      - name: Verify central policy is present (fail closed)
+        id: policy
+        env:
+          CONFIG_PATH: ${{ inputs.zizmor-config-path }}
+        run: |
+          set -euo pipefail
+          cfg=".zizmor-central/${CONFIG_PATH}"
+          if [ ! -s "$cfg" ]; then
+            echo "::error::Trusted zizmor config not found at ${cfg}. Failing closed." >&2
+            exit 1
+          fi
+          echo "config=${cfg}" >> "$GITHUB_OUTPUT"
+
+      # Upload-only: advanced-security mode makes the zizmor-action emit SARIF and
+      # upload it to code scanning itself, exiting 0 on findings. continue-on-error
+      # tolerates repos without GitHub Advanced Security (upload rejected) so the
+      # push is NEVER failed by this job.
+      - name: Scan and upload to code scanning
+        continue-on-error: true
+        uses: zizmorcore/zizmor-action@6fc4b006235f201fdab3722e17240ab420d580e5  # v0.6.1
+        with:
+          config: ${{ steps.policy.outputs.config }}
+          advanced-security: true
+          online-audits: true
+          persona: regular
