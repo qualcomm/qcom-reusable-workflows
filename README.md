@@ -12,11 +12,12 @@ The main orchestrator workflow is `reusable-qcom-preflight-checks-orchestrator.y
 
 1. **[Semgrep Scan](https://github.com/semgrep/semgrep)** - Static code analysis for security vulnerabilities
 2. **[Dependency Review](https://github.com/actions/dependency-review-action)** - Checks for vulnerabilities in dependencies
-3. **[Repolinter Check](https://github.com/todogroup/repolinter-action)** - Ensures repository follows best practices
-4. **[Copyright and License Check](https://github.com/qualcomm/copyright-license-checker-action)** - Verifies proper copyright and license notices
-5. **[Commit Email Check](https://github.com/qualcomm/commit-emails-check-action)** - Validates commit author emails
-6. **[Commit Message Check](https://github.com/qualcomm/commit-msg-check-action)** - Ensures commit messages follow standards (optional)
-7. **[ARMOR Compatibility Checkers](https://github.com/qualcomm/armor-checkers)** - Ensures source code follows API and ABI backward compatibility (optional)
+3. **[Dependency Confusion Scan](https://github.com/omni-line/omni-audit)** - Detects dependency confusion, typosquatted and known-malicious dependencies
+4. **[Repolinter Check](https://github.com/todogroup/repolinter-action)** - Ensures repository follows best practices
+5. **[Copyright and License Check](https://github.com/qualcomm/copyright-license-checker-action)** - Verifies proper copyright and license notices
+6. **[Commit Email Check](https://github.com/qualcomm/commit-emails-check-action)** - Validates commit author emails
+7. **[Commit Message Check](https://github.com/qualcomm/commit-msg-check-action)** - Ensures commit messages follow standards (optional)
+8. **[ARMOR Compatibility Checkers](https://github.com/qualcomm/armor-checkers)** - Ensures source code follows API and ABI backward compatibility (optional)
 
 
 ## Usage
@@ -39,6 +40,7 @@ jobs:
     with:
       enable-semgrep-scan: true
       enable-dependency-review: true
+      enable-dependency-confusion-scan: true
       enable-repolinter-check: true
       enable-copyright-license-check: true
       enable-commit-email-check: true
@@ -103,6 +105,37 @@ The workflow automatically:
 - Detects if dependency review is supported for your repository
 - Runs the review on pull requests or pushes
 - Fails on critical severity vulnerabilities
+
+### Dependency Confusion Scan
+
+The dependency confusion scan checks your dependency manifests with [omni-audit](https://github.com/omni-line/omni-audit) and reports the results as code scanning alerts in the repository's Security tab.
+
+**Configuration Options:**
+- `enable-dependency-confusion-scan`: Boolean to enable/disable the scan (default: `true`)
+- `dependency-confusion-scan-options`: String of extra omni-audit CLI options, separated by whitespace (default: empty string)
+
+The workflow:
+- Runs on push, pull request and `workflow_dispatch` events in public repositories only, because the scan sends dependency names to the public registries and would disclose the internal package names of private and internal repositories. Pull requests and pushes from Dependabot are skipped.
+- Reports dependencies whose name is not registered on the public registry, so anyone could publish it. It checks npm, PyPI, Maven, Go, Cargo, RubyGems, Composer and Conan manifests, and Docker Hub images in Dockerfiles and Compose files. NuGet is not supported.
+- Also reports typosquats of popular packages, known-malicious packages from the [OpenSSF malicious packages](https://github.com/ossf/malicious-packages) database, and package manager settings that let a public package replace an internal one, such as `--extra-index-url`
+- Uploads the results to code scanning (category `omni-audit`)
+- Fails when open code scanning alerts of error severity remain, which are omni-audit's critical and high findings. To accept a risk or mark a false positive, dismiss the alert in the Security tab.
+- Fails without uploading results when a manifest cannot be parsed or a registry cannot be reached, so an incomplete scan does not close open alerts
+- Downloads a pinned omni-audit release and verifies its SHA-256 digest
+
+Lockfile entries that resolve from public registries are not reported (`--no-sources`), because open source projects normally install from them.
+
+**Example options:**
+```yml
+dependency-confusion-scan-options: '--exclude tests/fixtures --safe-namespace @my-org/* --ignore my-internal-*'
+```
+- `--exclude <path>`: Skip a directory or file, e.g., test fixtures with placeholder or invalid manifests
+- `--safe-namespace <glob>`: Skip namespaces you own, e.g., an npm scope or a Maven group
+- `--ignore <glob>`: Skip package names
+- `--allow <name>`: Treat a package name as safe in the typosquat check
+- `--no-sources=false --expected-host <host>`: Also report lockfile entries that resolve from hosts other than your registry
+
+The options are split on whitespace and passed to omni-audit without quote processing. The output format, the exit behavior and `--strict` cannot be overridden. For all options, see the [omni-audit flags](https://github.com/omni-line/omni-audit#flags).
 
 ### Repolinter Check
 
