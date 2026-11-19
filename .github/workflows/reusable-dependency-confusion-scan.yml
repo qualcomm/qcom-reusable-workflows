@@ -134,16 +134,8 @@ jobs:
           category: omni-audit
           checkout_path: ${{ github.workspace }}/repo
 
-      - name: Install SARIF check dependencies
-        run: |
-          set -euo pipefail
-          python3 -m venv "$RUNNER_TEMP/sarif-check-venv"
-          "$RUNNER_TEMP/sarif-check-venv/bin/python" -m pip install --quiet --disable-pip-version-check \
-            --no-deps --require-hashes --only-binary=:all: -r reusable-workflows/script/requirements.txt
-
       - name: Fail on error severity findings
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          "$RUNNER_TEMP/sarif-check-venv/bin/python" reusable-workflows/script/check_sarif_error.py \
-            --tool-name omni-audit "$SARIF_FILE"
+          python3 reusable-workflows/script/check_sarif_error.py --tool-name omni-audit "$SARIF_FILE"

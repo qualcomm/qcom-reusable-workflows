@@ -4,14 +4,17 @@
 #!/usr/bin/env python3
 
 import argparse
+import http.client
 import json
 import os
 import re
 import sys
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-import requests
 
 # False positive: never block the check for these rules.
 NON_BLOCKING_RULES = {"python.lang.security.use-defused-xml-parse.use-defused-xml-parse"}
@@ -91,29 +94,39 @@ class CodeScanningUnavailable(Exception):
     """Raised when GitHub code scanning is not enabled (internal/private repo without GHAS)."""
 
 
+class ApiRequestError(Exception):
+    """Raised when the GitHub API request fails or returns an error status."""
+
+
 MAX_ATTEMPTS = 4
 RETRY_BACKOFF_SECONDS = 2
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
-def get_with_retry(url: str, headers: Dict[str, str], params: Dict[str, str]) -> requests.Response:
+def get_with_retry(url: str, headers: Dict[str, str], params: Dict[str, str]) -> Tuple[int, str]:
     """
     GET with exponential backoff on connection errors, timeouts and transient HTTP statuses.
-    Raises requests.RequestException once all attempts are exhausted.
+    Returns the HTTP status and response body.
+    Raises ApiRequestError once all attempts are exhausted.
     """
+    request = urllib.request.Request(f"{url}?{urllib.parse.urlencode(params)}", headers=headers)
     attempt = 1
     while True:
         try:
-            resp = requests.get(url, headers=headers, params=params, timeout=30)
-            if resp.status_code not in RETRYABLE_STATUS_CODES:
-                return resp
-            if attempt == MAX_ATTEMPTS:
-                resp.raise_for_status()  # raises HTTPError for 429/5xx
-            reason = f"HTTP {resp.status_code}"
-        except (requests.ConnectionError, requests.Timeout) as e:
-            if attempt == MAX_ATTEMPTS:
-                raise
+            try:
+                with urllib.request.urlopen(request, timeout=30) as resp:
+                    status, body = resp.status, resp.read().decode("utf-8")
+            except urllib.error.HTTPError as e:
+                status, body = e.code, e.read().decode("utf-8", errors="replace")
+            if status not in RETRYABLE_STATUS_CODES:
+                return status, body
+            reason = f"HTTP {status}"
+        except (OSError, http.client.HTTPException) as e:
+            # OSError covers URLError, timeouts and connection resets.
             reason = str(e)
+
+        if attempt == MAX_ATTEMPTS:
+            raise ApiRequestError(f"{reason} after {MAX_ATTEMPTS} attempts")
 
         delay = RETRY_BACKOFF_SECONDS * 2 ** (attempt - 1)
         print(
@@ -154,11 +167,12 @@ def fetch_open_alerts(owner: str, repo: str, token: str, ref: str, tool_name: st
         # Add page parameter for pagination
         params["page"] = str(page)
 
-        resp = get_with_retry(url, headers, params)
-        if resp.status_code == 403 and NO_ADVANCED_SECURITY_MESSAGE in resp.text:
-            raise CodeScanningUnavailable(resp.json().get("message", ""))
-        resp.raise_for_status()
-        alerts = resp.json()
+        status, body = get_with_retry(url, headers, params)
+        if status == 403 and NO_ADVANCED_SECURITY_MESSAGE in body:
+            raise CodeScanningUnavailable(json.loads(body).get("message", ""))
+        if status != 200:
+            raise ApiRequestError(f"HTTP {status}: {body[:200]}")
+        alerts = json.loads(body)
         if not isinstance(alerts, list):
             raise ValueError(f"Unexpected response from code-scanning API: {alerts!r}")
 
@@ -266,7 +280,7 @@ def main() -> int:
             open_alerts = fetch_open_alerts(owner, repo, github_token, ref, args.tool_name)
         except CodeScanningUnavailable as e:
             print(f"Code scanning unavailable ({e}); using SARIF-only check", file=sys.stderr)
-        except (requests.RequestException, ValueError) as e:
+        except (ApiRequestError, ValueError) as e:
             print(f"Error: Unable to fetch GitHub alerts: {e}", file=sys.stderr)
             return 2
 
