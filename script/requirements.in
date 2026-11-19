@@ -1,3 +1,0 @@
-# Runtime dependencies of the helper scripts in this directory.
-# After editing, regenerate requirements.txt with the command in its header.
-requests
