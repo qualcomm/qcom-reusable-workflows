@@ -6,6 +6,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -50,13 +51,18 @@ def get_location(result: Dict[str, Any]) -> Tuple[Optional[str], Optional[int]]:
     )
 
 
+def clean(value: Any) -> str:
+    """Flatten control characters so scanned-repo text cannot start a workflow command line."""
+    return re.sub(r"[\x00-\x1f\x7f]", " ", str(value))
+
+
 def print_finding(data: Dict[str, Any], is_github_alert: bool = False) -> None:
     """Print a formatted error message for a SARIF result or GitHub alert."""
     if is_github_alert:
         # GitHub API alert format
         rule_id = data.get("rule", {}).get("id", "unknown-rule")
         most_recent = data.get("most_recent_instance", {})
-        message = most_recent.get("message", {}).get("text", "Semgrep error-severity finding")
+        message = most_recent.get("message", {}).get("text", "error-severity finding")
         location_data = most_recent.get("location", {})
         path = location_data.get("path")
         line = location_data.get("start_line")
@@ -64,17 +70,17 @@ def print_finding(data: Dict[str, Any], is_github_alert: bool = False) -> None:
     else:
         # SARIF format
         rule_id = data.get("ruleId", "unknown-rule")
-        message = data.get("message", {}).get("text", "Semgrep error-severity finding")
+        message = data.get("message", {}).get("text", "error-severity finding")
         path, line = get_location(data)
         alert_url = None
     
     location = f"{path}:{line}" if path and line else path if path else "unknown location"
     
-    print(f"ERROR: {location}", file=sys.stderr)
-    print(f"  Rule: {rule_id}", file=sys.stderr)
-    print(f"  Message: {message}", file=sys.stderr)
+    print(f"ERROR: {clean(location)}", file=sys.stderr)
+    print(f"  Rule: {clean(rule_id)}", file=sys.stderr)
+    print(f"  Message: {clean(message)}", file=sys.stderr)
     if alert_url:
-        print(f"  Alert URL: {alert_url}", file=sys.stderr)
+        print(f"  Alert URL: {clean(alert_url)}", file=sys.stderr)
     print("", file=sys.stderr)
 
 
@@ -118,19 +124,19 @@ def get_with_retry(url: str, headers: Dict[str, str], params: Dict[str, str]) ->
         attempt += 1
 
 
-def fetch_open_alerts(owner: str, repo: str, token: str, ref: str) -> List[Dict[str, Any]]:
+def fetch_open_alerts(owner: str, repo: str, token: str, ref: str, tool_name: str) -> List[Dict[str, Any]]:
     """
-    Fetch open code-scanning alerts from GitHub.
+    Fetch open error-severity code-scanning alerts of a tool from GitHub.
     Returns a list of alert objects.
     Raises CodeScanningUnavailable if the repo has no Advanced Security.
     """
     url = f"https://api.github.com/repos/{owner}/{repo}/code-scanning/alerts"
 
-    # Build query parameters
+    # Severity is filtered client-side: the API's severity=error filter skips
+    # alerts whose rule sets a security-severity (those match critical/high/...).
     params = {
         "state": "open",
-        "tool_name": "Semgrep OSS",
-        "severity": "error",
+        "tool_name": tool_name,
         "per_page": "100",
         "ref": ref,
     }
@@ -164,7 +170,7 @@ def fetch_open_alerts(owner: str, repo: str, token: str, ref: str) -> List[Dict[
             break
         page += 1
     
-    return all_alerts
+    return [a for a in all_alerts if a.get("rule", {}).get("severity") == "error"]
 
 
 def load_sarif(file_path: Path) -> Dict[str, Any]:
@@ -223,6 +229,11 @@ def main() -> int:
         type=Path,
         help="SARIF file to inspect (default: semgrep.sarif)",
     )
+    parser.add_argument(
+        "--tool-name",
+        default="Semgrep OSS",
+        help='Code scanning tool whose open GitHub alerts are checked (default: "Semgrep OSS")',
+    )
     args = parser.parse_args()
 
     # Load and parse SARIF file
@@ -251,8 +262,8 @@ def main() -> int:
         print("Missing GitHub context (repository/token/ref); using SARIF-only check", file=sys.stderr)
     else:
         try:
-            print(f"Fetching open alerts for {owner}/{repo} on ref: {ref}", file=sys.stderr)
-            open_alerts = fetch_open_alerts(owner, repo, github_token, ref)
+            print(f"Fetching open {args.tool_name} alerts for {owner}/{repo} on ref: {ref}", file=sys.stderr)
+            open_alerts = fetch_open_alerts(owner, repo, github_token, ref, args.tool_name)
         except CodeScanningUnavailable as e:
             print(f"Code scanning unavailable ({e}); using SARIF-only check", file=sys.stderr)
         except (requests.RequestException, ValueError) as e:
