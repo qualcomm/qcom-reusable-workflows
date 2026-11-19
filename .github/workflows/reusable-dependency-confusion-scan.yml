@@ -1,0 +1,149 @@
+name: Dependency Confusion Scan Reusable Workflow
+
+# Scans dependency manifests with omni-audit (https://github.com/omni-line/omni-audit)
+# for names that are unclaimed on their public registry (dependency confusion),
+# typosquats, known-malicious packages and risky registry settings. Results are
+# uploaded to code scanning and open error-severity (critical/high) alerts fail the job.
+on:
+  workflow_call:
+    inputs:
+      dependency-confusion-scan-options:
+        required: false
+        type: string
+        default: ''
+        description: 'Extra omni-audit CLI options, separated by whitespace (e.g., "--exclude tests/fixtures --safe-namespace @my-org/*"). The output format, exit behavior and --strict cannot be overridden.'
+
+permissions: {}
+
+jobs:
+  run-dependency-confusion-scan:
+    # Public repositories only: the scan sends dependency names to public registries,
+    # which would disclose internal package names of private and internal repositories.
+    # Dependabot pull requests and pushes are skipped like in the Semgrep scan. The PR
+    # author and the pusher are checked instead of github.actor, which is whoever
+    # triggered the latest event (e.g., Dependabot updating a fork's PR branch).
+    if: >-
+      github.event.repository.visibility == 'public' &&
+      (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') &&
+      !(github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]') &&
+      !(github.event_name == 'push' && github.event.pusher.name == 'dependabot[bot]')
+    name: Run Dependency Confusion Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read          # check out the repository
+      security-events: write  # upload SARIF and read code scanning alerts
+
+    env:
+      # To update omni-audit, set the new version, copy the digest of
+      # omni-audit_Linux_x86_64.tar.gz from the release's checksums.txt and verify the
+      # archive's build provenance: gh attestation verify <archive> --repo omni-line/omni-audit
+      OMNI_AUDIT_VERSION: v0.11.0
+      OMNI_AUDIT_SHA256: 34a10e2398664b7533b9ca9b6dc77fd8dc4a323eccc4750310463f90d93e4418
+      OMNI_AUDIT_NO_MARKETING: '1'
+      NO_COLOR: '1'
+      SARIF_FILE: omni-audit.sarif
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: repo
+          # Scanning the PR head makes the upload land on refs/pull/N/head, the ref
+          # check_sarif_error.py reads alerts from.
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Checkout reusable workflow scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit this workflow runs from, so the scripts match the workflow version.
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: reusable-workflows
+          persist-credentials: false
+          sparse-checkout: script
+
+      - name: Install omni-audit
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" != "Linux" ] || [ "$RUNNER_ARCH" != "X64" ]; then
+            echo "::error::The pinned omni-audit archive is for Linux X64, not ${RUNNER_OS} ${RUNNER_ARCH}."
+            exit 1
+          fi
+          archive="$RUNNER_TEMP/omni-audit.tar.gz"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 --retry 3 \
+            --output "$archive" \
+            "https://github.com/omni-line/omni-audit/releases/download/${OMNI_AUDIT_VERSION}/omni-audit_Linux_x86_64.tar.gz"
+          echo "${OMNI_AUDIT_SHA256}  ${archive}" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/omni-audit"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/omni-audit" omni-audit
+          "$RUNNER_TEMP/omni-audit/omni-audit" --version
+
+      - name: Run omni-audit
+        working-directory: repo
+        env:
+          SCAN_OPTIONS: ${{ inputs.dependency-confusion-scan-options }}
+        run: |
+          set -euo pipefail
+          # Split on whitespace only: no quote removal, globbing or eval of caller input.
+          read -r -a extra_options <<< "$SCAN_OPTIONS"
+          for option in "${extra_options[@]}"; do
+            if [ "$option" = "--" ]; then
+              echo "::error::'--' is not supported in dependency-confusion-scan-options."
+              exit 1
+            fi
+          done
+
+          # Defaults go before the caller options so they can be overridden (for example
+          # --no-sources=false); the last occurrence of a flag wins, so the flags after
+          # the caller options are enforced.
+          sarif="$GITHUB_WORKSPACE/$SARIF_FILE"
+          status=0
+          "$RUNNER_TEMP/omni-audit/omni-audit" --no-sources --retries 4 "${extra_options[@]}" \
+            --format sarif --fail-on none --no-marketing --strict . > "$sarif" || status=$?
+
+          if ! jq -e '.runs' "$sarif" > /dev/null 2>&1; then
+            echo "::error::omni-audit did not produce a SARIF report (exit code ${status})."
+            exit 1
+          fi
+
+          # Values come from the scanned repository; control characters are flattened so
+          # they cannot start a workflow command line.
+          jq -r '
+            def clean: tostring | gsub("[[:cntrl:]]"; " ");
+            .runs[]
+            | ((.invocations // [])[] | (.toolExecutionNotifications // [])[] | "  warning: \(.message.text | clean)"),
+              "Findings: \(.results // [] | length)",
+              ((.results // [])[]
+                | (.locations[0].physicalLocation // {}) as $location
+                | "  \(.level // "warning" | clean) \(.ruleId | clean) \($location.artifactLocation.uri // "" | clean):\($location.region.startLine // "" | clean) \(.message.text | clean)")
+          ' "$sarif"
+
+          # An incomplete report is not uploaded: it would close open alerts for packages
+          # that could not be checked.
+          if [ "$status" -ne 0 ] || [ "$(jq '[.runs[].invocations[]?.executionSuccessful] | all' "$sarif")" != "true" ]; then
+            echo "::error::omni-audit could not check every manifest and package (exit code ${status}); see the warnings above. Re-run the job if a registry was unavailable, or exclude unparsable files with dependency-confusion-scan-options (e.g., --exclude tests/fixtures)."
+            exit 1
+          fi
+
+      - name: Upload to Security Tab
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          sarif_file: ${{ env.SARIF_FILE }}
+          category: omni-audit
+          checkout_path: ${{ github.workspace }}/repo
+
+      - name: Install SARIF check dependencies
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/sarif-check-venv"
+          "$RUNNER_TEMP/sarif-check-venv/bin/python" -m pip install --quiet --disable-pip-version-check \
+            --no-deps --require-hashes --only-binary=:all: -r reusable-workflows/script/requirements.txt
+
+      - name: Fail on error severity findings
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          "$RUNNER_TEMP/sarif-check-venv/bin/python" reusable-workflows/script/check_sarif_error.py \
+            --tool-name omni-audit "$SARIF_FILE"

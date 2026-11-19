@@ -36,6 +36,16 @@ on:
         required: false
         type: boolean
         default: true
+      enable-dependency-confusion-scan:
+        required: false
+        type: boolean
+        default: true
+        description: 'Scan dependency manifests for dependency confusion and supply-chain risks with omni-audit (public repositories only)'
+      dependency-confusion-scan-options:
+        required: false
+        type: string
+        default: ''
+        description: 'Extra omni-audit CLI options, separated by whitespace, e.g., "--exclude tests/fixtures --safe-namespace @my-org/*"'
       enable-commit-msg-check:
         required: false
         type: boolean
@@ -72,6 +82,16 @@ jobs:
     uses: ./.github/workflows/reusable-dependency-review.yml
     permissions:
       contents: read
+
+  dependency-confusion-scan:
+    if: ${{ inputs.enable-dependency-confusion-scan }}
+    name: Dependency Confusion Scan
+    uses: ./.github/workflows/reusable-dependency-confusion-scan.yml
+    with:
+      dependency-confusion-scan-options: ${{ inputs.dependency-confusion-scan-options }}
+    permissions:
+      contents: read          # check out the repository
+      security-events: write  # upload SARIF and read code scanning alerts
 
   repolinter-check:
     if: ${{ inputs.enable-repolinter-check }}
