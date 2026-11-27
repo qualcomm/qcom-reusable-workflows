@@ -86,8 +86,9 @@ jobs:
           SCAN_OPTIONS: ${{ inputs.dependency-confusion-scan-options }}
         run: |
           set -euo pipefail
-          # Split on whitespace only: no quote removal, globbing or eval of caller input.
-          read -r -a extra_options <<< "$SCAN_OPTIONS"
+          # Split on whitespace, including newlines from YAML block scalars, with no quote
+          # removal, globbing or eval of caller input. read -d '' returns 1 at end of input.
+          read -r -d '' -a extra_options <<< "$SCAN_OPTIONS" || true
           for option in "${extra_options[@]}"; do
             if [ "$option" = "--" ]; then
               echo "::error::'--' is not supported in dependency-confusion-scan-options."
