@@ -107,9 +107,16 @@ class FetchOpenAlertsTest(unittest.TestCase):
 class _Handler(http.server.BaseHTTPRequestHandler):
     statuses = []
     seen = []
+    redirect_to = None
 
     def do_GET(self):
-        _Handler.seen.append((self.path, self.headers.get("Authorization")))
+        _Handler.seen.append((self.server.server_port, self.path, self.headers.get("Authorization")))
+        if _Handler.redirect_to and self.path.startswith("/alerts"):
+            self.send_response(301)
+            self.send_header("Location", _Handler.redirect_to)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         status = _Handler.statuses.pop(0) if _Handler.statuses else 200
         body = b"[]" if status == 200 else b"{}"
         self.send_response(status)
@@ -121,20 +128,28 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         pass
 
 
+def _start_server():
+    server = http.server.HTTPServer(("127.0.0.1", 0), _Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
 class GetWithRetryTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.server = http.server.HTTPServer(("127.0.0.1", 0), _Handler)
-        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+        cls.server = _start_server()
+        cls.other_server = _start_server()  # a different port is a different host for the token
         cls.url = f"http://127.0.0.1:{cls.server.server_port}/alerts"
 
     @classmethod
     def tearDownClass(cls):
-        cls.server.shutdown()
-        cls.server.server_close()
+        for server in (cls.server, cls.other_server):
+            server.shutdown()
+            server.server_close()
 
     def setUp(self):
         _Handler.seen = []
+        _Handler.redirect_to = None
         patcher = mock.patch.object(c, "RETRY_BACKOFF_SECONDS", 0)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -146,9 +161,22 @@ class GetWithRetryTest(unittest.TestCase):
 
     def test_sends_query_and_auth_header(self):
         self.assertEqual(self.get([200]), (200, "[]"))
-        path, auth = _Handler.seen[0]
+        _, path, auth = _Handler.seen[0]
         self.assertEqual(path, "/alerts?ref=refs%2Fpull%2F1%2Fhead&page=1")
         self.assertEqual(auth, "Bearer tok")
+
+    def test_same_host_redirect_keeps_token(self):
+        _Handler.redirect_to = f"http://127.0.0.1:{self.server.server_port}/moved"
+        self.assertEqual(self.get([200])[0], 200)
+        self.assertEqual([(p.split("?")[0], a) for _, p, a in _Handler.seen],
+                         [("/alerts", "Bearer tok"), ("/moved", "Bearer tok")])
+
+    def test_cross_host_redirect_drops_token(self):
+        _Handler.redirect_to = f"http://127.0.0.1:{self.other_server.server_port}/moved"
+        self.assertEqual(self.get([200])[0], 200)
+        port, path, auth = _Handler.seen[-1]
+        self.assertEqual((port, path), (self.other_server.server_port, "/moved"))
+        self.assertIsNone(auth)
 
     def test_retries_transient_statuses(self):
         self.assertEqual(self.get([503, 429, 200])[0], 200)
@@ -164,7 +192,7 @@ class GetWithRetryTest(unittest.TestCase):
         self.assertEqual(len(_Handler.seen), c.MAX_ATTEMPTS)
 
     def test_connection_errors_raise_api_error(self):
-        with mock.patch.object(c.urllib.request, "urlopen", side_effect=OSError("refused")), \
+        with mock.patch.object(c._OPENER, "open", side_effect=OSError("refused")), \
                 contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(c.ApiRequestError):
                 c.get_with_retry(self.url, {}, {})

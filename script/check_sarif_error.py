@@ -103,6 +103,21 @@ RETRY_BACKOFF_SECONDS = 2
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
+class _AuthSafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Follow redirects, but send the token only to the same scheme and host, like requests."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new_request = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_request is not None:
+            old, new = urllib.parse.urlsplit(req.full_url), urllib.parse.urlsplit(new_request.full_url)
+            if (old.scheme, old.netloc) != (new.scheme, new.netloc):
+                new_request.remove_header("Authorization")
+        return new_request
+
+
+_OPENER = urllib.request.build_opener(_AuthSafeRedirectHandler)
+
+
 def get_with_retry(url: str, headers: Dict[str, str], params: Dict[str, str]) -> Tuple[int, str]:
     """
     GET with exponential backoff on connection errors, timeouts and transient HTTP statuses.
@@ -114,7 +129,7 @@ def get_with_retry(url: str, headers: Dict[str, str], params: Dict[str, str]) ->
     while True:
         try:
             try:
-                with urllib.request.urlopen(request, timeout=30) as resp:
+                with _OPENER.open(request, timeout=30) as resp:
                     status, body = resp.status, resp.read().decode("utf-8")
             except urllib.error.HTTPError as e:
                 status, body = e.code, e.read().decode("utf-8", errors="replace")
