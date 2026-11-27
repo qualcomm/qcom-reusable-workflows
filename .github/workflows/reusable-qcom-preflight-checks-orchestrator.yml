@@ -69,7 +69,7 @@ jobs:
   semgrep-scan:
     if: ${{ inputs.enable-semgrep-scan }}
     name: Semgrep Scan
-    uses: ./.github/workflows/reusable-semgrep-scan.yml
+    uses: $/.github/workflows/reusable-semgrep-scan.yml
     with:
       semgrep-cli-options: ${{ inputs.semgrep-cli-options }}
     permissions:
@@ -79,14 +79,14 @@ jobs:
   dependency-review:
     if: ${{ inputs.enable-dependency-review }}
     name: Dependency Review
-    uses: ./.github/workflows/reusable-dependency-review.yml
+    uses: $/.github/workflows/reusable-dependency-review.yml
     permissions:
       contents: read
 
   dependency-confusion-scan:
     if: ${{ inputs.enable-dependency-confusion-scan }}
     name: Dependency Confusion Scan
-    uses: ./.github/workflows/reusable-dependency-confusion-scan.yml
+    uses: $/.github/workflows/reusable-dependency-confusion-scan.yml
     with:
       dependency-confusion-scan-options: ${{ inputs.dependency-confusion-scan-options }}
     permissions:
@@ -96,7 +96,7 @@ jobs:
   repolinter-check:
     if: ${{ inputs.enable-repolinter-check }}
     name: Repolinter Check
-    uses: ./.github/workflows/reusable-repolinter-check.yml
+    uses: $/.github/workflows/reusable-repolinter-check.yml
     with:
       repolint-config-path: ${{ inputs.repolint-config-path }}
     permissions:
@@ -105,28 +105,28 @@ jobs:
   repo-policy-check:
     if: ${{ inputs.enable-repo-policy-check }}
     name: Repository Policy Check
-    uses: ./.github/workflows/reusable-repo-policy-check.yml
+    uses: $/.github/workflows/reusable-repo-policy-check.yml
     permissions:
       contents: read
 
   copyright-license-check:
     if: ${{ inputs.enable-copyright-license-check }}
     name: Copyright and License Check
-    uses: ./.github/workflows/reusable-copyright-license-check.yml
+    uses: $/.github/workflows/reusable-copyright-license-check.yml
     permissions:
       contents: read
 
   commit-email-check:
     if: ${{ inputs.enable-commit-email-check }}
     name: Commit Email Check
-    uses: ./.github/workflows/reusable-commit-emails-check.yml
+    uses: $/.github/workflows/reusable-commit-emails-check.yml
     permissions:
       contents: read
 
   commit-msg-check:
     if: ${{ inputs.enable-commit-msg-check }}
     name: Commit Message Check
-    uses: ./.github/workflows/reusable-commit-msg-check.yml
+    uses: $/.github/workflows/reusable-commit-msg-check.yml
     with:
       extra-options: ${{ inputs.commit-msg-check-extra-options }}    
     permissions:
